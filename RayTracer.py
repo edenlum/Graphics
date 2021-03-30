@@ -2,15 +2,37 @@ import numpy as np
 import sys
 import graphics
 
-options = {"cam" : Camera, "set" : , "mtl", "sph", "pln", "box", "lgt"}
+options = {"cam" : Camera, "set" : Settings, "mtl" : Material, "sph" : Sphere, "pln" : Plane, "box" : Box, "lgt" : Light}
 
-def parse_scene(scene_name):
-    with open(scene_name, 'r') as scene:
-        for line in scene:
-            if line[0] == "#" or len(line)==0:
-                continue # we skip comment lines
-            line = line.split()
-            options[line[0]](*line[1:])
+
+class Scene:
+    def __init__(self,):
+        self.materials = []
+        self.spheres = []
+        self.boxes = []
+        self.planes = []
+        self.lights = []
+
+    def parse_scene(scene_name):
+        with open(scene_name, 'r') as scene:
+            for line in scene:
+                if line[0] == "#" or len(line)==0:
+                    continue # we skip comment lines
+                line = line.split()
+                if line[0] == "cam":
+                    self.camera = Camera(*line[1:])
+                if line[0] == "set":
+                    self.Settings = Settings(*line[1:])
+                if line[0] == "mtl":
+                    self.materials.append(Material(*line[1:]))
+                if line[0] == "sph":
+                    self.spheres.append(Sphere(*line[1:]))
+                if line[0] == "pln":
+                    self.planes.append(Plane(*line[1:]))
+                if line[0] == "box":
+                    self.boxes.append(Box(*line[1:]))
+                if line[0] == "lgt":
+                    self.lights.append(Light(*line[1:]))
 
 
 
