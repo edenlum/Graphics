@@ -2,22 +2,22 @@ import numpy as np
 
 
 class Sphere:
-    def __init__(self, x : string, y : string, z : string, radius : string, mat_idx : string):
+    def __init__(self, x : str, y : str, z : str, radius : str, mat_idx : str):
         self.pos = (float(x),float(y),float(z))
         self.radius = float(radius)
         self.mat_idx = int(mat_idx)
 
 
 class Plane:
-    def __init__(self, nx : string, ny : string, nz : string, offset : string, mat_idx : string):
+    def __init__(self, nx : str, ny : str, nz : str, offset : str, mat_idx : str):
         self.normal = (float(nx), float(ny), float(nz))
         self.offset = float(offset)
         self.mat_idx = int(mat_idx)
 
 
 class Box:
-    def __init__(self, x : string,y:string,z:string, sx : string,sy : string,sz : string, rotx : string,roty : string,
-                 rotz : string, mat_idx : string):
+    def __init__(self, x : str,y:str,z:str, sx : str,sy : str,sz : str, rotx : str,roty : str,
+                 rotz : str, mat_idx : str):
         self.pos = (float(x),float(y),float(z))
         self.x=float(x)
         self.y=float(y)
@@ -32,8 +32,8 @@ class Box:
 
 
 class Material:
-    def __init__(self, dr : string, dg : string, db : string, sr : string, sg : string, sb : string, rr : string,
-                 rg : string, rb : string, phong : string, trans : string):
+    def __init__(self, dr : str, dg : str, db : str, sr : str, sg : str, sb : str, rr : str,
+                 rg : str, rb : str, phong : str, trans : str):
         self.dif = (float(dr), float(dg), float(db))
         self.spec = (float(sr), float(sg), float(sb))
         self.phong = float(phong)
@@ -42,8 +42,8 @@ class Material:
 
 
 class Light:
-    def __init__(self, x : string, y:string, z:string, r : string, g : string, b : string, spec : string,
-                 shadow : string,radius : string):
+    def __init__(self, x : str, y:str, z:str, r : str, g : str, b : str, spec : str,
+                 shadow : str,radius : str):
         self.pos = (float(x), float(y), float(z))
         self.x = float(x)
         self.y = float(y)
@@ -59,31 +59,31 @@ class Light:
 
 
 class Camera:
-    def __init__(self, x : float,y:float,z:float, lx : float,ly:float,lz:float,ux : float,uy:float,
-                 uz:float,dist : float,width : float, fish_eye : bool = False, k : float = 0.5):
-        self.pos = (x, y, z)
-        self.x = x
-        self.y = y
-        self.z = z
-        self.lpos = (lx, ly, lz)
-        self.lx = lx
-        self.ly = ly
-        self.lz = lz
-        self.upos = (ux, uy, uz)
-        self.ux = ux
-        self.uy = uy
-        self.uz = uz
-        self.dist = dist
-        self.width = width
-        self.fish_eye = fish_eye
-        self.k = k
+    def __init__(self, x : str, y:str, z:str, lx : str, ly:str, lz:str, ux : str, uy:str,
+                 uz:str, dist : str, width : str, fish_eye : str = False, k : str = 0.5):
+        self.pos = (float(x), float(y), float(z))
+        self.x = float(x)
+        self.z = float(z)
+        self.y = float(y)
+        self.lpos = (float(lx), float(ly), float(lz))
+        self.lx = float(lx)
+        self.ly = float(ly)
+        self.lz = float(lz)
+        self.upos = (float(ux), float(uy), float(uz))
+        self.ux = float(ux)
+        self.uy = float(uy)
+        self.uz = float(uz)
+        self.dist = float(dist)
+        self.width = float(width)
+        self.fish_eye = bool(fish_eye)
+        self.k = float(k)
 
 
 class Settings:
-    def __init__(self, bgr : float, bgg : float, bgb : float, shadow_num : int, rec_level : int):
-        self.bg = (bgr, bgg, bgb)
-        self.shadow_num = shadow_num
-        self.rec_level = rec_level
+    def __init__(self, bgr : str, bgg : str, bgb : str, shadow_num : str, rec_level : str):
+        self.bg = (float(bgr), float(bgg), float(bgb))
+        self.shadow_num = int(shadow_num)
+        self.rec_level = int(rec_level)
 
 
 def quad(a,b,c):
