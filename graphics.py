@@ -16,3 +16,15 @@ class Box:
         self.pos = pos
         self.scale = scale
         self.rotation = rotation
+
+
+class Material:
+    def __init__(self, dif : float, spec : float,phong : float,ref : float,trans : float):
+        self.dif = dif
+        self.spec = spec
+        self.phong = phong
+        self.ref = ref
+        self.trans = trans
+
+
+
