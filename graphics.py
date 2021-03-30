@@ -84,3 +84,10 @@ class Settings:
         self.bg = (bgr, bgg, bgb)
         self.shadow_num = shadow_num
         self.rec_level = rec_level
+
+
+def quad(a,b,c):
+    if(b**2>=4*a*c):
+        return ((-b+np.sqrt(b**2-4*a*c))/2*a,(-b-np.sqrt(b**2-4*a*c))/2*a)
+    else:
+        return None
