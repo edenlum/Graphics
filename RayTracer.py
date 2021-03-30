@@ -1,9 +1,6 @@
 import numpy as np
 import sys
-import graphics
-
-options = {"cam" : Camera, "set" : Settings, "mtl" : Material, "sph" : Sphere, "pln" : Plane, "box" : Box, "lgt" : Light}
-
+from graphics import *
 
 class Scene:
     def __init__(self,):
@@ -13,12 +10,14 @@ class Scene:
         self.planes = []
         self.lights = []
 
-    def parse_scene(scene_name):
+    def parse_scene(self, scene_name):
         with open(scene_name, 'r') as scene:
             for line in scene:
-                if line[0] == "#" or len(line)==0:
+                if len(line)==0 or line[0] == "#":
                     continue # we skip comment lines
                 line = line.split()
+                if len(line)==0:
+                    continue
                 if line[0] == "cam":
                     self.camera = Camera(*line[1:])
                 if line[0] == "set":
@@ -36,10 +35,12 @@ class Scene:
 
 
 
-
 if __name__ == "__main__":
     scene_name = sys.argv[1]
     image_name = sys.argv[2]
     res = (500, 500)
     if len(sys.argv) > 3:
         res = (int(sys.argv[3]), int(sys.argv[3]))
+
+    scene = Scene()
+    scene.parse_scene(scene_name)
