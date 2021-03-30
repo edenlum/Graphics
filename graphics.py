@@ -47,3 +47,6 @@ class Camera:
         self.shadow_num = shadow_num
         self.rec_level = rec_level
         self.fish_eye = fish_eye
+
+
+
