@@ -37,7 +37,7 @@ class Sphere:
         t_hc = np.sqrt(self.radius**2 - d_sq)
         return (t_ca - t_hc), self.mat_idx # there is also t_ca+t_hc
 
-    def find_normal(self, p : np.array):
+    def get_normal(self, p : np.array):
         n = (p-self.pos)/norm(p-self.pos)
         return n
 
@@ -46,12 +46,16 @@ class Sphere:
 class Plane:
     def __init__(self, nx : str, ny : str, nz : str, offset : str, mat_idx : str):
         self.normal = np.array([float(nx), float(ny), float(nz)])
+        self.normal /= norm(self.normal)
         self.offset = float(offset)
         self.mat_idx = int(mat_idx)
 
     def intersect(self, ray : Ray):
         t = (self.offset - np.dot(ray.p0, self.normal)) / (np.dot(ray.vec, self.normal))
         return t, self.mat_idx
+
+    def get_normal(self, p):
+        return self.normal
 
 
 class Box:
@@ -80,19 +84,19 @@ class Material:
         self.trans = float(trans)
 
     def get_color(self, bgc : np.array):
-        self.color = bgc * self.trans + (self.dif + self.spec) * (1-self.trans) + self.ref
-        return self.color
+        # self.color = bgc * self.trans + (self.dif + self.spec) * (1-self.trans) + self.ref
+        return self.dif
 
 
 
 class Light:
     def __init__(self, x : str, y:str, z:str, r : str, g : str, b : str, spec : str,
                  shadow : str,radius : str):
-        self.pos = (float(x), float(y), float(z))
+        self.pos = np.array([float(x), float(y), float(z)])
         self.x = float(x)
         self.y = float(y)
         self.z = float(z)
-        self.color = (float(r), float(g), float(b))
+        self.color = np.array([float(r), float(g), float(b)])
         self.r = float(r)
         self.g = float(g)
         self.b = float(b)
