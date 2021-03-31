@@ -37,6 +37,23 @@ class Sphere:
         t_hc = np.sqrt(self.radius**2 - d_sq)
         return (t_ca - t_hc), self.mat_idx # there is also t_ca+t_hc
 
+    def intersect_vec(self, p0 : np.array, v : np.array):
+        # getting n rays, p0 and v are of shape (n,3)
+        # returns t_min (array of shape n) and mat_idx
+        l = self.pos[np.newaxis, :] - p0
+        t_ca = np.sum(l*v, axis=1)
+        d_sq = np.sum(l**2, axis=1) - t_ca**2
+        condition = (t_ca < 0) + (d_sq > self.radius**2)
+        t_hc = np.where(condition > 0, -1, np.sqrt(self.radius**2 - d_sq)) # -1 means no intersection (any value <0)
+        t = (t_ca - t_hc)
+        hit_point = p0 + v*t[:, np.newaxis]
+        return t, self.mat_idx, self.get_normal_vec(hit_point)
+
+    def get_normal_vec(self, p: np.array):
+        d = p-self.pos
+        n = d / np.sqrt(np.sum(d**2, axis=1))[:, np.newaxis]
+        return n
+
     def get_normal(self, p : np.array):
         n = (p-self.pos)/norm(p-self.pos)
         return n
@@ -54,7 +71,13 @@ class Plane:
         t = (self.offset - np.dot(ray.p0, self.normal)) / (np.dot(ray.vec, self.normal))
         return t, self.mat_idx
 
-    def get_normal(self, p):
+    def intersect_vec(self, p0: np.array, v: np.array):
+        # getting n rays, p0 and v are of shape (n,3)
+        # returns t_min (array of shape n) and mat_idx
+        t = (self.offset - np.sum(p0*self.normal[np.newaxis,:], axis=1)) / np.sum(v*self.normal[np.newaxis,:], axis=1)
+        return t, self.mat_idx, self.get_normal()
+
+    def get_normal(self):
         return self.normal
 
 
