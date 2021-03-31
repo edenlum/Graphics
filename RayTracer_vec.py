@@ -58,20 +58,21 @@ class Scene:
         if (np.any(np.sum(rays_v**2, axis=1) > 1)):
             print(rays_v)
 
-        mat_idxs = self.find_intersection_vec(rays_p0, rays_v)
+        mat_idxs, normals, hit_points = self.find_intersection_vec(rays_p0, rays_v)
         mat_idxs = mat_idxs.reshape(self.height, self.width)
+        normals = normals.reshape(self.height, self.width,3)
+        hit_points = hit_points.reshape(self.height, self.width,3)
         for i in range(self.height):
             for j in range(self.width):
-                image[i,j,:] = self.materials[mat_idxs[i,j]].get_color(self.Settings.bg)
+                image[i,j,:] = self.materials[mat_idxs[i,j]-1].get_color(self.Settings.bg)
+                # image[i,j,:] = self.get_color(hit_points[i,j,:], mat_idxs[i,j], normals[i,j,:])
         return image
 
 
     def find_intersection_vec(self, p0 : np.array, v: np.array):
         #if(rec>self.Settings.rec_level):
             #return None
-        min_t = np.Infinity
-        mat_idx = None
-        object = None
+        n = p0.shape[0]
 
         inters = []
         mat_idxs = []
@@ -91,10 +92,15 @@ class Scene:
 
         inters = np.stack(inters)
         inters = np.where(inters>0, inters, np.inf)
+        indeces = inters.argmin(axis=0)
         mat_idxs = np.array(mat_idxs)
-        mat_idxs = np.tile(mat_idxs, (p0.shape[0], 1))
-        mat_idxs = mat_idxs[np.arange(p0.shape[0]), inters.argmin(axis=0)]
-        return mat_idxs
+        mat_idxs = np.tile(mat_idxs, (n, 1))
+        mat_idxs = mat_idxs[np.arange(n), indeces]
+        normals = np.stack(normals)
+        normals = normals[indeces, np.arange(n)].reshape(n,3)
+        t = inters[indeces, np.arange(n)]
+        hit_points = p0 + v*t[:, np.newaxis]
+        return mat_idxs, normals, hit_points
 
 
     def get_color(self, hit_point, mat_idx, normal):
