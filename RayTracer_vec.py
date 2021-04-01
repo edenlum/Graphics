@@ -36,6 +36,24 @@ class Scene:
                     self.boxes.append(Box(*line[1:]))
                 if line[0] == "lgt":
                     self.lights.append(Light(*line[1:]))
+        self.vectorize_materials()
+
+
+    def vectorize_materials(self):
+        # creates np.arrays of shape (m, 3) or (m) where m is the number of materials
+        # each array contains the value of a field for all the materials by order
+        dif, spec, ref, phong, trans = [], [], [], [], []
+        for mat in self.materials:
+            dif.append(mat.dif)
+            spec.append(mat.spec)
+            ref.append(mat.ref)
+            phong.append(mat.phong)
+            trans.append(mat.trans)
+        self.mat_dif = np.stack(dif)
+        self.mat_spec = np.stack(spec)
+        self.mat_ref = np.stack(ref)
+        self.mat_phong = np.array(phong)
+        self.mat_trans = np.array(trans)
 
 
     def ray_cast_vec(self,):
@@ -55,16 +73,19 @@ class Scene:
         rays_v = rays_v.reshape((self.height*self.width,3)) - rays_p0
 
         rays_v = rays_v / np.sqrt(np.sum(rays_v**2, axis=1))[:, np.newaxis]
-        if (np.any(np.sum(rays_v**2, axis=1) > 1)):
+        if (np.any(np.sum(rays_v**2, axis=1) > 1.1)):
             print(rays_v)
 
-        mat_idxs, normals, hit_points = self.find_intersection_vec(rays_p0, rays_v)
-        mat_idxs = mat_idxs.reshape(self.height, self.width)
-        normals = normals.reshape(self.height, self.width,3)
-        hit_points = hit_points.reshape(self.height, self.width,3)
+        mat_idxs, normals, t = self.find_intersection_vec(rays_p0, rays_v)
+        hit_points = rays_p0 + rays_v*t[:, np.newaxis]
+        # mat_idxs = mat_idxs.reshape(self.height, self.width)
+        # normals = normals.reshape(self.height, self.width,3)
+        # hit_points = hit_points.reshape(self.height, self.width,3)
+        colors = self.get_color_vec(hit_points, mat_idxs, normals)
+        colors = colors.reshape(self.height, self.width, 3)
         for i in range(self.height):
             for j in range(self.width):
-                image[i,j,:] = self.materials[mat_idxs[i,j]-1].get_color(self.Settings.bg)
+                image[i,j,:] = colors[i,j,:]
                 # image[i,j,:] = self.get_color(hit_points[i,j,:], mat_idxs[i,j], normals[i,j,:])
         return image
 
@@ -99,35 +120,49 @@ class Scene:
         normals = np.stack(normals)
         normals = normals[indeces, np.arange(n)].reshape(n,3)
         t = inters[indeces, np.arange(n)]
-        hit_points = p0 + v*t[:, np.newaxis]
-        return mat_idxs, normals, hit_points
+        return mat_idxs, normals, t
 
 
-    def get_color(self, hit_point, mat_idx, normal):
-        # color = self.materials[mat_idx-1].get_color(self.Settings.bg)
-        mat = self.materials[mat_idx-1]
-        color = np.zeros(3)
+    def get_color_vec(self, hit_points, mat_idxs, normals):
+        # getting n hit points and normals - shape (n,3), mat_idxs of shape n
+        # returns color for each ray (n,3)
+        mat_idxs = mat_idxs-1
+        n = hit_points.shape[0]
+        shadows = self.Settings.shadow_num
+        color = np.zeros((n,3))
         for light in self.lights:
-            hit_count=0
-            d = light.pos - hit_point
-            d /= norm(d)
+            d = light.pos[np.newaxis, :] - hit_points
+            d /= np.sqrt(np.sum(d**2, axis=1))[:, np.newaxis]
+            # d is of shape (n, 3)
             dir1=np.cross(d,np.array([1,0,0]))
             dir2=np.cross(d,dir1)
-            p0=light.pos-dir1*light.radius/2-dir2*light.radius/2
-            for i in range(self.Settings.shadow_num):
-                p=p0.copy()+i*light.radius/self.Settings.shadow_num*dir1
-                for j in range(self.Settings.shadow_num):
-                    d = p-hit_point
-                    d /= norm(d)
-                    if(self.find_intersection(Ray(hit_point,d))==None):
-                        hit_count+=1
-                    p+=light.radius/self.Settings.shadow_num*dir2
-            precent=hit_count/self.Settings.shadow_num**2
+            p0=light.pos[np.newaxis, :]-dir1*light.radius/2-dir2*light.radius/2
+            light_pixel = light.radius/shadows
+            x = np.arange(shadows)
+            y = np.arange(shadows)
+            x, y = np.meshgrid(x, y)
+            noise_x = np.random.rand(shadows, shadows)
+            noise_y = np.random.rand(shadows, shadows)
+            print(x)
+            x = x + noise_x
+            print(x)
+            y = y + noise_y
+            x = x[np.newaxis, :, :, np.newaxis]*dir1[:, np.newaxis, np.newaxis, :]*light_pixel
+            y = y[np.newaxis, :, :, np.newaxis]*dir2[:, np.newaxis, np.newaxis, :]*light_pixel
+            light_pos = x + y + p0[:, np.newaxis, np.newaxis, :] # shape is (n, shadow, shadow, 3)
+            rays_p0 = np.tile(hit_points, (shadows**2,1))
+            rays_v = light_pos.reshape(n*shadows**2, 3) - rays_p0 # shape is (n*shadow^2 ,3)
+            rays_v = rays_v / np.sqrt(np.sum(rays_v**2, axis=1))[:, np.newaxis]
+            _, _, t = self.find_intersection_vec(rays_p0, rays_v)
+            t = t.reshape((n, shadows**2))
+            precent = np.sum(np.isinf(t), axis=1)/shadows**2
             light_intensity=(1-light.shadow)*1+light.shadow*precent
-            cos = np.dot(d, normal)
-            if cos>0:
-                color += light_intensity*(1-mat.trans) * cos*light.color*(mat.dif)#+ mat.spec*light.spec)
-        color = np.minimum(color, np.ones(3))
+            cos = np.sum(d*normals, axis=1) # shape is (n,)
+            a = light_intensity*(1-self.mat_trans[mat_idxs])
+            b = cos[:, np.newaxis]*light.color[np.newaxis, :]
+            c = self.mat_dif[mat_idxs, :]
+            color += a[:, np.newaxis] * b * c#+ mat.spec*light.spec)
+        color = np.minimum(color, np.ones((n,3)))
         # color /= np.max(color)
         # print(color)
         return color
