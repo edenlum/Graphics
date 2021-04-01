@@ -143,20 +143,18 @@ class Scene:
             x, y = np.meshgrid(x, y)
             noise_x = np.random.rand(shadows, shadows)
             noise_y = np.random.rand(shadows, shadows)
-            print(x)
             x = x + noise_x
-            print(x)
             y = y + noise_y
             x = x[np.newaxis, :, :, np.newaxis]*dir1[:, np.newaxis, np.newaxis, :]*light_pixel
             y = y[np.newaxis, :, :, np.newaxis]*dir2[:, np.newaxis, np.newaxis, :]*light_pixel
             light_pos = x + y + p0[:, np.newaxis, np.newaxis, :] # shape is (n, shadow, shadow, 3)
-            rays_p0 = np.tile(hit_points, (shadows**2,1))
+            rays_p0 = np.repeat(hit_points, repeats=shadows**2, axis=0)
             rays_v = light_pos.reshape(n*shadows**2, 3) - rays_p0 # shape is (n*shadow^2 ,3)
             rays_v = rays_v / np.sqrt(np.sum(rays_v**2, axis=1))[:, np.newaxis]
             _, _, t = self.find_intersection_vec(rays_p0, rays_v)
             t = t.reshape((n, shadows**2))
             precent = np.sum(np.isinf(t), axis=1)/shadows**2
-            light_intensity=(1-light.shadow)*1+light.shadow*precent
+            light_intensity=(1-light.shadow)*1+light.shadow*precent # shape is (n)
             cos = np.sum(d*normals, axis=1) # shape is (n,)
             a = light_intensity*(1-self.mat_trans[mat_idxs])
             b = cos[:, np.newaxis]*light.color[np.newaxis, :]
