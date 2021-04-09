@@ -62,19 +62,17 @@ class Scene:
         height = self.height * pixel_size
         self.camera.calc_axis()
         center_screen = self.camera.pos + self.camera.dist * self.camera.Vz
-        p0 = center_screen - self.camera.Vx * self.camera.width/2 - self.camera.Vy * height/2
-        rays_p0 = np.tile(self.camera.pos, (self.height*self.width,1))
+        corner_screen = center_screen - self.camera.Vx * (self.camera.width+pixel_size)/2 - self.camera.Vy * (height+pixel_size)/2
+        rays_p0 = np.tile(self.camera.pos, (self.height*self.width,1)) # shape of  n,3
         x = np.arange(self.width)
         y = np.arange(self.height)
         x, y = np.meshgrid(x, y)
         x = x[:, :, np.newaxis]*self.camera.Vx[np.newaxis, np.newaxis, :]*pixel_size
         y = y[:, :, np.newaxis]*self.camera.Vy[np.newaxis, np.newaxis, :]*pixel_size
-        rays_v = x + y + p0
+        rays_v = x + y + corner_screen
         rays_v = rays_v.reshape((self.height*self.width,3)) - rays_p0
-
-        rays_v = rays_v / np.sqrt(np.sum(rays_v**2, axis=1))[:, np.newaxis]
-        if (np.any(np.sum(rays_v**2, axis=1) > 1.1)):
-            print(rays_v)
+        # normalization
+        rays_v = normalize(rays_v)
 
         mat_idxs, normals, t = self.find_intersection_vec(rays_p0, rays_v)
         hit_points = rays_p0 + rays_v*t[:, np.newaxis]
@@ -113,13 +111,13 @@ class Scene:
 
         inters = np.stack(inters)
         inters = np.where(inters>0, inters, np.inf)
-        indeces = inters.argmin(axis=0)
+        indices = inters.argmin(axis=0)
         mat_idxs = np.array(mat_idxs)
         mat_idxs = np.tile(mat_idxs, (n, 1))
-        mat_idxs = mat_idxs[np.arange(n), indeces]
+        mat_idxs = mat_idxs[np.arange(n), indices]
         normals = np.stack(normals)
-        normals = normals[indeces, np.arange(n)].reshape(n,3)
-        t = inters[indeces, np.arange(n)]
+        normals = normals[indices, np.arange(n)].reshape(n,3)
+        t = inters[indices, np.arange(n)]
         return mat_idxs, normals, t
 
 
@@ -128,29 +126,29 @@ class Scene:
         # returns color for each ray (n,3)
         mat_idxs = mat_idxs-1
         n = hit_points.shape[0]
-        shadows = self.Settings.shadow_num
+        shadows = 1#self.Settings.shadow_num
         color = np.zeros((n,3))
         for light in self.lights:
-            d = light.pos[np.newaxis, :] - hit_points
-            d /= np.sqrt(np.sum(d**2, axis=1))[:, np.newaxis]
+            d = normalize(light.pos[np.newaxis, :] - hit_points)
+            # d /= np.sqrt(np.sum(d**2, axis=1))[:, np.newaxis]
             # d is of shape (n, 3)
             dir1=np.cross(d,np.array([1,0,0]))
             dir2=np.cross(d,dir1)
-            p0=light.pos[np.newaxis, :]-dir1*light.radius/2-dir2*light.radius/2
+            corner_light=light.pos[np.newaxis, :]-dir1*light.radius/2-dir2*light.radius/2
             light_pixel = light.radius/shadows
             x = np.arange(shadows)
             y = np.arange(shadows)
             x, y = np.meshgrid(x, y)
-            noise_x = np.random.rand(shadows, shadows)
-            noise_y = np.random.rand(shadows, shadows)
+            noise_x = np.random.uniform(size=(shadows, shadows))
+            noise_y = np.random.uniform(size=(shadows, shadows))
             x = x + noise_x
             y = y + noise_y
             x = x[np.newaxis, :, :, np.newaxis]*dir1[:, np.newaxis, np.newaxis, :]*light_pixel
             y = y[np.newaxis, :, :, np.newaxis]*dir2[:, np.newaxis, np.newaxis, :]*light_pixel
-            light_pos = x + y + p0[:, np.newaxis, np.newaxis, :] # shape is (n, shadow, shadow, 3)
+            light_pos = x + y + corner_light[:, np.newaxis, np.newaxis, :] # shape is (n, shadow, shadow, 3)
             rays_p0 = np.repeat(hit_points, repeats=shadows**2, axis=0)
-            rays_v = light_pos.reshape(n*shadows**2, 3) - rays_p0 # shape is (n*shadow^2 ,3)
-            rays_v = rays_v / np.sqrt(np.sum(rays_v**2, axis=1))[:, np.newaxis]
+            rays_v = normalize(light_pos.reshape(n*shadows**2, 3) - rays_p0) # shape is (n*shadow^2 ,3)
+            # rays_v = rays_v / np.sqrt(np.sum(rays_v**2, axis=1))[:, np.newaxis]
             _, _, t = self.find_intersection_vec(rays_p0, rays_v)
             t = t.reshape((n, shadows**2))
             precent = np.sum(np.isinf(t), axis=1)/shadows**2
@@ -184,6 +182,9 @@ if __name__ == "__main__":
     # print(s.intersect_vec(p0, v))
     # p0_rays = np.tile(np.array([1,2,3]), (10,1))
     # print(p0_rays)
+    import time
+    s = time.time()
     image = scene.ray_cast_vec()
+    print(time.time() - s)
     plt.imshow(image,origin='lower')
     plt.show()

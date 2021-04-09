@@ -44,14 +44,14 @@ class Sphere:
         t_ca = np.sum(l*v, axis=1)
         d_sq = np.sum(l**2, axis=1) - t_ca**2
         condition = (t_ca < 0) + (d_sq > self.radius**2)
-        t_hc = np.where(condition, np.inf, np.sqrt(self.radius**2 - d_sq)) # -1 means no intersection (any value <0)
+        t_hc = np.where(condition, np.inf, np.sqrt(self.radius**2 - d_sq)) # np.inf means no intersection
         t = (t_ca - t_hc)
         hit_point = p0 + v*t[:, np.newaxis]
         return t, self.mat_idx, self.get_normal_vec(hit_point)
 
     def get_normal_vec(self, p: np.array):
         d = p-self.pos
-        n = d / np.sqrt(np.sum(d**2, axis=1))[:, np.newaxis]
+        n = normalize(d)
         return n
 
     def get_normal(self, p : np.array):
@@ -83,19 +83,29 @@ class Plane:
 
 
 class Box:
-    def __init__(self, x : str,y:str,z:str, sx : str,sy : str,sz : str, rotx : str,roty : str,
-                 rotz : str, mat_idx : str):
+    def __init__(self, x : str, y:str, z:str, size:str, mat_idx : str):
         self.pos = (float(x),float(y),float(z))
         self.x=float(x)
         self.y=float(y)
         self.z=float(z)
-        self.sx = float(sx)
-        self.sy = float(sy)
-        self.sz = float(sz)
-        self.rotx = float(rotx)
-        self.roty = float(roty)
-        self.rotz = float(rotz)
+        self.size = float(size)
         self.mat_idx = int(mat_idx)
+
+        # 6 planes, in order -x, x, -y, y, -z, z
+        self.planes = [Plane('-1', '0', '0', str(self.x - self.size/2), str(self.mat_idx)),
+                       Plane('1', '0', '0', str(self.x + self.size/2), str(self.mat_idx)),
+                       Plane('0', '-1', '0', str(self.y - self.size/2), str(self.mat_idx)),
+                       Plane('0', '1', '0', str(self.y + self.size/2), str(self.mat_idx)),
+                       Plane('0', '0', '-1', str(self.z - self.size/2), str(self.mat_idx)),
+                       Plane('0', '0', '1', str(self.z + self.size/2), str(self.mat_idx))]
+
+    def intersect_vec(self, p0: np.array, v: np.array):
+        # a box is 6 planes, we will calculate the hit point in each plane
+        # and check if the hit point is inside the boundaries
+        n = p0.shape[0]
+        for plane in self.planes:
+            t, _, _ = plane.intersect_vec(p0, v)
+            hit_point = p0 + v*t[:, np.newaxis]
 
 
 class Material:
@@ -178,3 +188,9 @@ def quad(a,b,c):
         return ((-b+np.sqrt(b**2-4*a*c))/(2*a),(-b-np.sqrt(b**2-4*a*c))/(2*a))
     else:
         return None
+
+
+def normalize(vec : np.array, norm_axis=1):
+    # gets a tensor of arbitrary shape,
+    # and returns the tensor with values normalized according to given axis
+    return vec/np.sqrt(np.sum(vec**2, axis=norm_axis, keepdims=True))
