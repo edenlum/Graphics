@@ -103,9 +103,29 @@ class Box:
         # a box is 6 planes, we will calculate the hit point in each plane
         # and check if the hit point is inside the boundaries
         n = p0.shape[0]
-        for plane in self.planes:
+        intersecting_planes=[]
+        for i in range(len(self.planes)):
+            plane=self.planes[i]
             t, _, _ = plane.intersect_vec(p0, v)
             hit_point = p0 + v*t[:, np.newaxis]
+            if(i<=1):
+                condition=hit_point[1]>=(self.y - self.size/2) and hit_point[1]<=(self.y + self.size/2)
+                and hit_point[2]>=(self.z - self.size/2) and hit_point[2]<=(self.z + self.size/2)
+                t=np.where(condition, np.inf, [plane,hit_point])
+                intersecting_planes.append([plane,hit_point, np.norm(p0-hit_point)])
+            elif (i<=3):
+                if (hit_point[2] >= (self.z - self.size / 2) and hit_point[2] <= (self.z + self.size / 2)
+                and hit_point[0] >= (self.x - self.size / 2) and hit_point[0] <= (self.x + self.size / 2)):
+                    intersecting_planes.append([plane,hit_point, np.norm(p0-hit_point)])
+            else:
+                if (hit_point[1] >= (self.y - self.size / 2) and hit_point[1] <= (self.y + self.size / 2)
+                and hit_point[0] >= (self.x - self.size / 2) and hit_point[0] <= (self.x + self.size / 2)):
+                    intersecting_planes.append([plane,hit_point, np.norm(p0-hit_point)])
+
+        np.argmin(intersecting_planes,axis=2)
+
+
+
 
 
 class Material:
