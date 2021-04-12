@@ -104,23 +104,26 @@ class Box:
         # and check if the hit point is inside the boundaries
         n = p0.shape[0]
         intersecting_planes=[]
+
         for i in range(len(self.planes)):
             plane=self.planes[i]
             t, _, _ = plane.intersect_vec(p0, v)
             hit_point = p0 + v*t[:, np.newaxis]
             if(i<=1):
-                condition=hit_point[1]>=(self.y - self.size/2) and hit_point[1]<=(self.y + self.size/2)\
-                          and hit_point[2]>=(self.z - self.size/2) and hit_point[2]<=(self.z + self.size/2)
+                condition=np.array([hit_point[j,1]>=(self.y - self.size/2) and hit_point[j,1]<=(self.y + self.size/2)\
+                          and hit_point[j,2]>=(self.z - self.size/2) and hit_point[j,2]<=(self.z + self.size/2) for j in range(n)])
             elif (i<=3):
-                condition = hit_point[2] >= (self.z - self.size / 2) and hit_point[2] <= (self.z + self.size / 2)\
-                            and hit_point[0] >= (self.x - self.size / 2) and hit_point[0] <= (self.x + self.size / 2)
+                condition = np.array([hit_point[j,2] >= (self.z - self.size / 2) and hit_point[j,2] <= (self.z + self.size / 2)\
+                            and hit_point[j,0] >= (self.x - self.size / 2) and hit_point[j,0] <= (self.x + self.size / 2) for j in range(n)])
             else:
-                condition = hit_point[1] >= (self.y - self.size / 2) and hit_point[1] <= (self.y + self.size / 2)\
-                            and hit_point[0] >= (self.x - self.size / 2) and hit_point[0] <= (self.x + self.size / 2)
-            intersecting_planes.append(np.where(condition, np.inf, [np.norm(p0 - hit_point),plane.normal,t]))
+                condition = np.array([hit_point[j,1] >= (self.y - self.size / 2) and hit_point[j,1] <= (self.y + self.size / 2)\
+                            and hit_point[j,0] >= (self.x - self.size / 2) and hit_point[j,0] <= (self.x + self.size / 2) for j in range(n)])
+
+            intersecting_planes.append(np.array([np.array([norm(p0[j] - hit_point[j]),plane.normal,t[j]]) if condition[j] else np.array([np.inf,plane.normal,np.inf]) for j in range(n)]))
         intersecting_planes=np.array(intersecting_planes)
-        correct_planes=intersecting_planes.sort(intersecting_planes[:,:,0].argsort())[:,0]
-        return correct_planes[,:2], self.mat_idx,correct_planes[,:1]
+        correct_planes = np.array([sorted(intersecting_planes[:, i], key=lambda x:x[0]) for i in range(n)])
+
+        return correct_planes[:,0,2], self.mat_idx,np.vstack(correct_planes[:,0,1])
 
 
 

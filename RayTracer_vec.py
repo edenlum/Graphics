@@ -109,6 +109,12 @@ class Scene:
             mat_idxs.append(mat_idx)
             normals.append(normal)
 
+        for box in self.boxes:
+            inter, mat_idx, normal = box.intersect_vec(p0, v)
+            inters.append(inter)
+            mat_idxs.append(mat_idx)
+            normals.append(normal)
+
         inters = np.stack(inters)
         inters = np.where(inters>0, inters, np.inf)
         indices = inters.argmin(axis=0)
@@ -129,8 +135,10 @@ class Scene:
         shadows = 1#self.Settings.shadow_num
         color = np.zeros((n,3))
         for light in self.lights:
-            d = normalize(light.pos[np.newaxis, :] - hit_points)
-            # d /= np.sqrt(np.sum(d**2, axis=1))[:, np.newaxis]
+            d = light.pos[np.newaxis, :] - hit_points
+            sd=(d**2).sum(axis=1)
+            for i in range(len(sd)):
+                d[i]/=np.sqrt(sd[i])
             # d is of shape (n, 3)
             dir1=np.cross(d,np.array([1,0,0]))
             dir2=np.cross(d,dir1)
@@ -148,7 +156,7 @@ class Scene:
             light_pos = x + y + corner_light[:, np.newaxis, np.newaxis, :] # shape is (n, shadow, shadow, 3)
             rays_p0 = np.repeat(hit_points, repeats=shadows**2, axis=0)
             rays_v = normalize(light_pos.reshape(n*shadows**2, 3) - rays_p0) # shape is (n*shadow^2 ,3)
-            # rays_v = rays_v / np.sqrt(np.sum(rays_v**2, axis=1))[:, np.newaxis]
+            #rays_v = rays_v / np.sqrt(np.sum(rays_v**2, axis=1))[:, np.newaxis]
             _, _, t = self.find_intersection_vec(rays_p0, rays_v)
             t = t.reshape((n, shadows**2))
             precent = np.sum(np.isinf(t), axis=1)/shadows**2
