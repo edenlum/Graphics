@@ -71,7 +71,9 @@ class Scene:
         for i in range(self.Settings.rec_level):
             mat_idxs, normals, t = self.find_intersection_vec(rays_p0, rays_v)
             hit_points = rays_p0 + rays_v*t[:, np.newaxis]
-            colors += self.get_color_vec(hit_points, mat_idxs, normals).reshape((self.height, self.width, 3))*reflections
+            condition=np.isinf(t.reshape((self.height, self.width))[:,:,np.newaxis])
+            colors += np.where(condition,np.full(shape=(self.height, self.width, 3),fill_value=0),
+                               self.get_color_vec(hit_points, mat_idxs, normals).reshape((self.height, self.width, 3))*reflections)
             reflections *= self.mat_ref[mat_idxs-1].reshape((self.height, self.width, 3))
             rays_p0=hit_points
             rays_v=reflection(normals,rays_v)
@@ -146,7 +148,10 @@ class Scene:
             a = light_intensity*(1-self.mat_trans[mat_idxs])
             b = cos[:, np.newaxis]*light.color[np.newaxis, :]
             c = self.mat_dif[mat_idxs, :]
-            color += a[:, np.newaxis] * b * c#+ self.mat_spec[mat_idxs]*light.spec#+self.mat_dif[mat_idxs]*light
+            e = cos[:, np.newaxis] * np.full(shape=np.shape(light.color[np.newaxis, :]),fill_value=light.spec)
+            f = self.mat_spec[mat_idxs, :]
+            color += np.where(np.isinf(hit_points),self.Settings.bg,a[:, np.newaxis] * b * c)#+ self.mat_spec[mat_idxs]*light.spec#+self.mat_dif[mat_idxs]*light
+            color+= np.where(np.isinf(hit_points),self.Settings.bg,a[:, np.newaxis] * e * f*(np.sum(normalize(d-rays_v)*normals,axis=1)[:,np.newaxis])**self.mat_phong)
         color = np.minimum(color, np.ones((n,3)))
         # color /= np.max(color)
         # print(color)
