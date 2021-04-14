@@ -113,24 +113,17 @@ class Box:
             hit_points = p0 + v*t[:, np.newaxis]
             if(i<=1):
                 condition = in_range(hit_points, [1,2], lowers=[self.y-self.size/2, self.z-self.size/2], uppers = [self.y+self.size/2, self.z+self.size/2])
-                # condition = ((self.y - self.size/2) <= hit_point[:, 1]) *(hit_point[:, 1] <= (self.y + self.size/2))   and
-                # condition = np.array([hit_point[j,1]>=(self.y - self.size/2) and hit_point[j,1]<=(self.y + self.size/2)\
-                #           and hit_point[j,2]>=(self.z - self.size/2) and hit_point[j,2]<=(self.z + self.size/2) for j in range(n)])
+
             elif (i<=3):
                 condition = in_range(hit_points, [0,2], lowers=[self.x-self.size/2, self.z-self.size/2], uppers = [self.x+self.size/2, self.z+self.size/2])
 
-                # condition = np.array([hit_point[j,2] >= (self.z - self.size / 2) and hit_point[j,2] <= (self.z + self.size / 2)\
-                            # and hit_point[j,0] >= (self.x - self.size / 2) and hit_point[j,0] <= (self.x + self.size / 2) for j in range(n)])
             else:
                 condition = in_range(hit_points, [0,1], lowers=[self.x-self.size/2, self.y-self.size/2], uppers = [self.x+self.size/2, self.y+self.size/2])
-
-                # condition = np.array([hit_point[j,1] >= (self.y - self.size / 2) and hit_point[j,1] <= (self.y + self.size / 2)\
-                            # and hit_point[j,0] >= (self.x - self.size / 2) and hit_point[j,0] <= (self.x + self.size / 2) for j in range(n)])
 
             t = np.where(condition, t, np.inf)
             ts.append(t)
             normals.append(normal)
-            # intersecting_planes.append(np.array([np.array([norm(p0[j] - hit_point[j]),plane.normal,t[j]]) if condition[j] else np.array([np.inf,plane.normal,np.inf]) for j in range(n)]))
+
         ts=np.array(ts) # shape of (6, n)
         normals = np.array(normals) # shape of (6, n, 3)
         indices = np.argmin(ts, axis=0) # shape of n
@@ -138,12 +131,6 @@ class Box:
         correct_normals = normals[indices, np.arange(n)].reshape(n,3)
 
         return correct_t, self.mat_idx, correct_normals
-        # correct_planes = np.array([sorted(intersecting_planes[:, i], key=lambda x:x[0]) for i in range(n)])
-
-        # return correct_planes[:,0,2], self.mat_idx,np.vstack(correct_planes[:,0,1])
-
-
-
 
 
 class Material:
@@ -215,10 +202,10 @@ class Settings:
         self.rec_level = int(rec_level)
 
 
-def reflection(normal : np.array, ray : Ray, point : np.array):
-    direction = ray.vec - 2*normal * np.dot(ray.vec, normal)
-    new_ray = Ray(point, direction)
-    return new_ray
+def reflection(normal : np.array, rays_v: np.array):
+    direction = rays_v - 2*normal * np.sum(rays_v*normal,axis=1)[:,np.newaxis]
+    #new_ray = direction
+    return direction
 
 
 def quad(a,b,c):

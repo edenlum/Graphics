@@ -66,11 +66,16 @@ class Scene:
         rays_v = grid_points.reshape((self.height*self.width,3)) - rays_p0
         # normalization
         rays_v = normalize(rays_v)
+        colors=np.zeros((self.height, self.width,3))
+        reflections=np.ones((self.height, self.width, 3))
+        for i in range(self.Settings.rec_level):
+            mat_idxs, normals, t = self.find_intersection_vec(rays_p0, rays_v)
+            hit_points = rays_p0 + rays_v*t[:, np.newaxis]
+            colors += self.get_color_vec(hit_points, mat_idxs, normals).reshape((self.height, self.width, 3))*reflections
+            reflections *= self.mat_ref[mat_idxs-1].reshape((self.height, self.width, 3))
+            rays_p0=hit_points
+            rays_v=reflection(normals,rays_v)
 
-        mat_idxs, normals, t = self.find_intersection_vec(rays_p0, rays_v)
-        hit_points = rays_p0 + rays_v*t[:, np.newaxis]
-        colors = self.get_color_vec(hit_points, mat_idxs, normals)
-        colors = colors.reshape(self.height, self.width, 3)
         for i in range(self.height):
             for j in range(self.width):
                 image[i,j,:] = colors[i,j,:]
@@ -121,7 +126,7 @@ class Scene:
         # returns color for each ray (n,3)
         mat_idxs = mat_idxs-1
         n = hit_points.shape[0]
-        shadows = self.Settings.shadow_num
+        shadows = 1#self.Settings.shadow_num
         color = np.zeros((n,3))
         hit_points = hit_points + 0.0001*normals
         for light in self.lights:
@@ -141,7 +146,7 @@ class Scene:
             a = light_intensity*(1-self.mat_trans[mat_idxs])
             b = cos[:, np.newaxis]*light.color[np.newaxis, :]
             c = self.mat_dif[mat_idxs, :]
-            color += a[:, np.newaxis] * b * c#+ mat.spec*light.spec)
+            color += a[:, np.newaxis] * b * c#+ self.mat_spec[mat_idxs]*light.spec#+self.mat_dif[mat_idxs]*light
         color = np.minimum(color, np.ones((n,3)))
         # color /= np.max(color)
         # print(color)
