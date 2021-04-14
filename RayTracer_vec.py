@@ -72,8 +72,8 @@ class Scene:
             mat_idxs, normals, t = self.find_intersection_vec(rays_p0, rays_v)
             hit_points = rays_p0 + rays_v*t[:, np.newaxis]
             condition=np.isinf(t.reshape((self.height, self.width))[:,:,np.newaxis])
-            colors += np.where(condition,np.full(shape=(self.height, self.width, 3),fill_value=0),
-                               self.get_color_vec(hit_points, mat_idxs, normals).reshape((self.height, self.width, 3))*reflections)
+            colors += reflections*np.where(condition,np.full((self.height, self.width, 3),self.Settings.bg),
+                               self.get_color_vec(hit_points, mat_idxs, normals, -rays_v).reshape((self.height, self.width, 3)))
             reflections *= self.mat_ref[mat_idxs-1].reshape((self.height, self.width, 3))
             rays_p0=hit_points
             rays_v=reflection(normals,rays_v)
@@ -123,7 +123,7 @@ class Scene:
         return mat_idxs, normals, t
 
 
-    def get_color_vec(self, hit_points, mat_idxs, normals):
+    def get_color_vec(self, hit_points, mat_idxs, normals, camera_vec):
         # getting n hit points and normals - shape (n,3), mat_idxs of shape n
         # returns color for each ray (n,3)
         mat_idxs = mat_idxs-1
@@ -145,16 +145,14 @@ class Scene:
             precent = np.sum(np.isinf(t), axis=1)/shadows**2
             light_intensity=(1-light.shadow)*1+light.shadow*precent # shape is (n)
             cos = np.sum(d*normals, axis=1) # shape is (n,)
-            a = light_intensity*(1-self.mat_trans[mat_idxs])
-            b = cos[:, np.newaxis]*light.color[np.newaxis, :]
-            c = self.mat_dif[mat_idxs, :]
-            e = cos[:, np.newaxis] * np.full(shape=np.shape(light.color[np.newaxis, :]),fill_value=light.spec)
-            f = self.mat_spec[mat_idxs, :]
-            color += np.where(np.isinf(hit_points),self.Settings.bg,a[:, np.newaxis] * b * c)#+ self.mat_spec[mat_idxs]*light.spec#+self.mat_dif[mat_idxs]*light
-            color+= np.where(np.isinf(hit_points),self.Settings.bg,a[:, np.newaxis] * e * f*(np.sum(normalize(d-rays_v)*normals,axis=1)[:,np.newaxis])**self.mat_phong)
+            background = self.Settings.bg[np.newaxis, :] * self.mat_trans[mat_idxs][:, np.newaxis]
+            diffuse = self.mat_dif[mat_idxs] * cos [:, np.newaxis]
+            r = normalize(reflection(normals, -d)) # reflected normalized ray from light source to hit point
+            phi = np.sum(r*camera_vec, axis=1) # angle between reflected ray from light source and vector to camera
+            spec = self.mat_spec[mat_idxs] * (phi**self.mat_phong[mat_idxs])[:,np.newaxis]
+            hit_color = light.color[np.newaxis, :] * background + light.color[np.newaxis, :] * (diffuse + spec) * (1 - self.mat_trans[mat_idxs])[:, np.newaxis]
+            color += light_intensity[:, np.newaxis]*(np.where(np.isinf(hit_points),self.Settings.bg, hit_color))
         color = np.minimum(color, np.ones((n,3)))
-        # color /= np.max(color)
-        # print(color)
         return color
 
 
