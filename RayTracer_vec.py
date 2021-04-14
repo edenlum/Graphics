@@ -140,10 +140,14 @@ class Scene:
             light_pos = create_grid((shadows, shadows), dir1, dir2, light_pixel, light.pos, noise=True)
             rays_p0 = np.repeat(hit_points, repeats=shadows**2, axis=0)
             rays_v = normalize(light_pos.reshape(n*shadows**2, 3) - rays_p0) # shape is (n*shadow^2 ,3)
+
+            # calculates intersections from hit_point to light source
             _, _, t = self.find_intersection_vec(rays_p0, rays_v)
             t = t.reshape((n, shadows**2))
+
             precent = np.sum(np.isinf(t), axis=1)/shadows**2
             light_intensity=(1-light.shadow)*1+light.shadow*precent # shape is (n)
+
             cos = np.sum(d*normals, axis=1) # shape is (n,)
             background = self.Settings.bg[np.newaxis, :] * self.mat_trans[mat_idxs][:, np.newaxis]
             diffuse = self.mat_dif[mat_idxs] * cos [:, np.newaxis]
@@ -152,6 +156,7 @@ class Scene:
             spec = self.mat_spec[mat_idxs] * (phi**self.mat_phong[mat_idxs])[:,np.newaxis]
             hit_color = light.color[np.newaxis, :] * background + light.color[np.newaxis, :] * (diffuse + spec) * (1 - self.mat_trans[mat_idxs])[:, np.newaxis]
             color += light_intensity[:, np.newaxis]*(np.where(np.isinf(hit_points),self.Settings.bg, hit_color))
+
         color = np.minimum(color, np.ones((n,3)))
         return color
 
