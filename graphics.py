@@ -93,13 +93,13 @@ class Box:
         print(str(self.x-self.size/2))
 
         # 6 planes, in order -x, x, -y, y, -z, z
-        self.planes = [Plane('1', '0', '0', str(self.x + self.size/2), str(self.mat_idx)),
-        Plane('-1', '0', '0', str(self.x - self.size/2), str(self.mat_idx))]#,
-                       # ,
-                       # Plane('0', '-1', '0', str(self.y + self.size/2), str(self.mat_idx)),
-                       # Plane('0', '1', '0', str(self.y - self.size/2), str(self.mat_idx)),
-                       # Plane('0', '0', '-1', str(self.z - self.size/2), str(self.mat_idx)),
-                       # Plane('0', '0', '1', str(self.z + self.size/2), str(self.mat_idx))]
+        self.planes = [Plane('-1', '0', '0', str(-self.x + self.size/2), str(self.mat_idx)),
+            Plane('1', '0', '0', str(self.x + self.size/2), str(self.mat_idx)),
+
+                        Plane('0', '-1', '0', str(-self.y + self.size/2), str(self.mat_idx)),
+                        Plane('0', '1', '0', str(self.y + self.size/2), str(self.mat_idx)),
+                        Plane('0', '0', '-1', str(-self.z + self.size/2), str(self.mat_idx)),
+                        Plane('0', '0', '1', str(self.z + self.size/2), str(self.mat_idx))]
 
     def intersect_vec(self, p0: np.array, v: np.array):
         # a box is 6 planes, we will calculate the hit point in each plane
