@@ -200,7 +200,7 @@ def create_grid(res, dir1: np.array, dir2: np.array, pixel_size: np.array, cente
 
 
 
-if __name__ == "__main__":
+def main():
     if len(sys.argv) < 3:
         print("Not enough arguments provided. Please specify an input scene file and an output image file for rendering.")
         exit()
@@ -212,12 +212,6 @@ if __name__ == "__main__":
 
     scene = Scene(res[0], res[1])
     scene.parse_scene(scene_name)
-    # s = scene.spheres[0]
-    # p0 = np.zeros((10,3))
-    # v = np.arange(30).reshape(10,3)
-    # print(s.intersect_vec(p0, v))
-    # p0_rays = np.tile(np.array([1,2,3]), (10,1))
-    # print(p0_rays)
     import time
     s = time.time()
     image = scene.ray_cast_vec()
