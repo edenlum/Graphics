@@ -145,36 +145,37 @@ class Scene:
         # returns color for each ray (n,3)
         mat_idxs = mat_idxs-1
         n = hit_points.shape[0]
-        shadows = 1#self.Settings.shadow_num
+        shadows = self.Settings.shadow_num
         color = np.zeros((n,3))
+        l = len(self.lights)
         hit_points = hit_points + 0.0001*normals
-        for light in self.lights:
-            d = normalize(light.pos[np.newaxis, :] - hit_points)
-            # d is of shape (n, 3)
-            dir1=np.cross(d,np.array([1,0,0]))
-            dir2=np.cross(d,dir1)
-            light_pixel = light.radius/shadows
-            light_pos = create_grid((shadows, shadows), dir1, dir2, light_pixel, light.pos, noise=True)
-            rays_p0 = np.repeat(hit_points, repeats=shadows**2, axis=0)
-            rays_v = normalize(light_pos.reshape(n*shadows**2, 3) - rays_p0) # shape is (n*shadow^2 ,3)
+        # for light in self.lights:
 
-            # calculates intersections from hit_point to light source
-            _, _, t = self.find_intersection_vec(rays_p0, rays_v)
-            t = t.reshape((n, shadows**2))
+        d = normalize(self.light_pos[np.newaxis, :, :] - hit_points[:, np.newaxis, :])
+        # d is of shape (n, l, 3)
+        dir1=np.cross(d,np.array([1,0,0]))
+        dir2=np.cross(d,dir1)
+        light_pixel = self.light_radius/shadows # shape of (l,)
+        light_points = create_grid((shadows, shadows), dir1, dir2, light_pixel, self.light_pos, noise=True)
+        rays_p0 = np.repeat(hit_points, repeats=l*shadows**2, axis=0)
+        rays_v = normalize(light_points.reshape(n*l*shadows**2, 3) - rays_p0) # shape is (n*l*shadow^2 ,3)
 
-            precent = np.sum(np.isinf(t), axis=1)/shadows**2
-            light_intensity=(1-light.shadow)*1+light.shadow*precent # shape is (n)
+        # calculates intersections from hit_point to light source
+        _, _, t = self.find_intersection_vec(rays_p0, rays_v)
+        t = t.reshape((n, l, shadows**2))
 
-            cos = np.sum(d*normals, axis=1) # shape is (n,)
-            background = self.Settings.bg[np.newaxis, :] * self.mat_trans[mat_idxs][:, np.newaxis]
-            diffuse = self.mat_dif[mat_idxs] * cos [:, np.newaxis]
-            r = normalize(reflection(normals, -d)) # reflected normalized ray from light source to hit point
-            phi = np.sum(r*camera_vec, axis=1) # angle between reflected ray from light source and vector to camera
-            spec = self.mat_spec[mat_idxs] * (phi**self.mat_phong[mat_idxs])[:,np.newaxis]
-            hit_color = light.color[np.newaxis, :] * background + light.color[np.newaxis, :] * (diffuse + spec) * (1 - self.mat_trans[mat_idxs])[:, np.newaxis]
-            color += light_intensity[:, np.newaxis]*(np.where(np.isinf(hit_points),self.Settings.bg, hit_color))
+        precent = np.sum(np.isinf(t), axis=2)/shadows**2
+        light_intensity = (1 - self.light_shadow)[np.newaxis, :] + self.light_shadow[np.newaxis, :] * precent # shape is (n, l)
 
-        color = np.minimum(color, np.ones((n,3)))
+        cos = np.sum(d*normals[:, np.newaxis, :], axis=2) # shape is (n,l)
+        background = self.Settings.bg[np.newaxis, np.newaxis, :] * self.mat_trans[mat_idxs][:, np.newaxis, np.newaxis] # shape of (n, l, 3)
+        diffuse = self.mat_dif[mat_idxs][:, np.newaxis, :] * cos [:, :, np.newaxis] # shape of (n, l, 3)
+        r = normalize(reflection(np.repeat(normals, repeats = l, axis=0), (-d).reshape(n*l,3))) # reflected normalized ray from light source to hit point - shape (n*l , 3)
+        phi = np.sum(r.reshape(n,l,3)*camera_vec[:, np.newaxis, :], axis=2) # angle between reflected ray from light source and vector to camera
+        spec = self.mat_spec[mat_idxs][:, np.newaxis, :] * (phi**self.mat_phong[mat_idxs][:, np.newaxis])[:, :, np.newaxis]
+        hit_color = self.light_color[np.newaxis, :, :] * background + self.light_color[np.newaxis, :, :] * (diffuse + spec) * (1 - self.mat_trans[mat_idxs])[:, np.newaxis, np.newaxis]
+        color = light_intensity[:, :, np.newaxis]*(np.where(np.isinf(hit_points[:, np.newaxis, :]), self.Settings.bg, hit_color))
+        color = np.sum(color, axis=1)
         return color
 
 
