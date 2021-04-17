@@ -3,8 +3,13 @@ import sys
 from graphics import *
 from numpy.linalg import norm
 from matplotlib import pyplot as plt
+from PIL import Image
+
+DTYPE = np.float32
+
 
 class Scene:
+
     def __init__(self, width : int, height : int):
         self.width = width # number of pixels
         self.height = height # number of pixels
@@ -36,11 +41,11 @@ class Scene:
                     self.boxes.append(Box(*line[1:]))
                 if line[0] == "lgt":
                     self.lights.append(Light(*line[1:]))
-        self.vectorize_materials()
+        self.vectorize_attributes()
 
 
-    def vectorize_materials(self):
-        # creates np.arrays of shape (m, 3) or (m) where m is the number of materials
+    def vectorize_attributes(self):
+        # creates np.arrays of shape (m, 3) or (m) where m is the number of materials/lights
         # each array contains the value of a field for all the materials by order
         dif, spec, ref, phong, trans = [], [], [], [], []
         for mat in self.materials:
@@ -49,34 +54,58 @@ class Scene:
             ref.append(mat.ref)
             phong.append(mat.phong)
             trans.append(mat.trans)
+
+        light_pos, light_rad, light_shadow, light_color = [], [], [], []
+        for light in self.lights:
+            light_pos.append(light.pos)
+            light_rad.append(light.radius)
+            light_shadow.append(light.shadow)
+            light_color.append(light.color)
+
         self.mat_dif = np.stack(dif)
         self.mat_spec = np.stack(spec)
         self.mat_ref = np.stack(ref)
         self.mat_phong = np.array(phong)
         self.mat_trans = np.array(trans)
+        self.light_pos = np.array(light_pos)
+        self.light_radius = np.array(light_rad)
+        self.light_shadow = np.array(light_shadow)
+        self.light_color = np.stack(light_color)
 
 
     def ray_cast_vec(self,):
-        image = np.zeros((self.width, self.height, 3))
+        image = np.zeros((self.width, self.height, 3), dtype=DTYPE)
         pixel_size = self.camera.width / self.width
         self.camera.calc_axis()
+        n = self.height*self.width
         center_screen = self.camera.pos + self.camera.dist * self.camera.Vz
-        rays_p0 = np.tile(self.camera.pos, (self.height*self.width,1)) # shape of  n,3
-        grid_points = create_grid((self.width, self.height), self.camera.Vx[np.newaxis, :], self.camera.Vy[np.newaxis, :], pixel_size, center_screen, noise=False)
-        rays_v = grid_points.reshape((self.height*self.width,3)) - rays_p0
+        rays_p0 = np.tile(self.camera.pos, (n,1)) # shape of  n,3
+        grid_points = create_grid((self.width, self.height), self.camera.Vx[np.newaxis, np.newaxis, :], \
+                    self.camera.Vy[np.newaxis, np.newaxis, :], np.array([pixel_size]),  \
+                    center_screen[np.newaxis, :], noise=False)
+        rays_v = grid_points.reshape((n,3)) - rays_p0
         # normalization
         rays_v = normalize(rays_v)
-        colors=np.zeros((self.height, self.width,3))
-        reflections=np.ones((self.height, self.width, 3))
+        colors=np.zeros((self.height, self.width,3), dtype=DTYPE)
+        reflections=np.ones((self.height, self.width, 3), dtype=DTYPE)
+
+        rays_v = rays_v.astype(dtype=DTYPE)
+        rays_p0 = rays_p0.astype(dtype=DTYPE)
+
         for i in range(self.Settings.rec_level):
+            print(rays_v.dtype)
             mat_idxs, normals, t = self.find_intersection_vec(rays_p0, rays_v)
             hit_points = rays_p0 + rays_v*t[:, np.newaxis]
             condition=np.isinf(t.reshape((self.height, self.width))[:,:,np.newaxis])
+            color = self.get_color_vec(hit_points, mat_idxs, normals, -rays_v)
             colors += reflections*np.where(condition,np.full((self.height, self.width, 3),self.Settings.bg),
-                               self.get_color_vec(hit_points, mat_idxs, normals, -rays_v).reshape((self.height, self.width, 3)))
+                                           color.reshape((self.height, self.width, 3)))
             reflections *= self.mat_ref[mat_idxs-1].reshape((self.height, self.width, 3))
             rays_p0=hit_points
             rays_v=reflection(normals,rays_v)
+
+
+        colors = np.minimum(colors, np.ones((self.height, self.width, 3)))
 
         for i in range(self.height):
             for j in range(self.width):
@@ -84,7 +113,7 @@ class Scene:
         return image
 
 
-    def find_intersection_vec(self, p0 : np.array, v: np.array):
+    def find_intersection_vec(self, p0 : np.array, v: np.array, shadow = False):
         #if(rec>self.Settings.rec_level):
             #return None
         n = p0.shape[0]
@@ -93,20 +122,8 @@ class Scene:
         mat_idxs = []
         normals = []
 
-        for sphere in self.spheres:
-            inter, mat_idx, normal = sphere.intersect_vec(p0, v)
-            inters.append(inter)
-            mat_idxs.append(mat_idx)
-            normals.append(normal)
-
-        for plane in self.planes:
-            inter, mat_idx, normal = plane.intersect_vec(p0, v)
-            inters.append(inter)
-            mat_idxs.append(mat_idx)
-            normals.append(normal)
-
-        for box in self.boxes:
-            inter, mat_idx, normal = box.intersect_vec(p0, v)
+        for object in self.spheres + self.planes + self.boxes:
+            inter, mat_idx, normal = object.intersect_vec(p0, v)
             inters.append(inter)
             mat_idxs.append(mat_idx)
             normals.append(normal)
@@ -161,24 +178,24 @@ class Scene:
         return color
 
 
-def create_grid(res, dir1: np.array, dir2: np.array, pixel_size: float, center: np.array, noise: bool):
+def create_grid(res, dir1: np.array, dir2: np.array, pixel_size: np.array, center: np.array, noise: bool):
     # creates a grid of points in 3d space
-    # dir is of shape (n, 3)
+    # dir is of shape (n, l, 3)
     w, h = res
-    w_size = w*pixel_size
+    w_size = w*pixel_size # shape of l
     h_size = h*pixel_size
-    corner = center[np.newaxis, :] - dir1 * (w_size - pixel_size)/2 - dir2 * (h_size - pixel_size)/2 # of shape (n, 3)
+    corner = center[np.newaxis, :] - dir1 * ((w_size - pixel_size)/2)[np.newaxis, :, np.newaxis] - dir2 * ((h_size - pixel_size)/2)[np.newaxis, :, np.newaxis] # of shape (n, l, 3)
     x = np.arange(w)
     y = np.arange(h)
     x, y = np.meshgrid(x, y)
     if noise:
-        noise_x = np.random.uniform(-0.5, 0.5, size=(w, h))
-        noise_y = np.random.uniform(-0.5, 0.5, size=(w, h))
+        noise_x = np.random.uniform(-0.5, 0.5, size=(w, h)).astype(dtype=DTYPE)
+        noise_y = np.random.uniform(-0.5, 0.5, size=(w, h)).astype(dtype=DTYPE)
         x = x + noise_x
         y = y + noise_y
-    x = x[np.newaxis, :, :, np.newaxis]*dir1[:, np.newaxis, np.newaxis, :]*pixel_size # shape of (n, w, h, 3)
-    y = y[np.newaxis, :, :, np.newaxis]*dir2[:, np.newaxis, np.newaxis, :]*pixel_size # shape of (n, w, h, 3)
-    points = x + y + corner[:, np.newaxis, np.newaxis, :]
+    x = x[np.newaxis, np.newaxis, :, :, np.newaxis]*dir1[:, :, np.newaxis, np.newaxis, :]*pixel_size[np.newaxis, :, np.newaxis, np.newaxis, np.newaxis] # shape of (n, l, w, h, 3)
+    y = y[np.newaxis, np.newaxis, :, :, np.newaxis]*dir2[:, :, np.newaxis, np.newaxis, :]*pixel_size[np.newaxis, :, np.newaxis, np.newaxis, np.newaxis] # shape of (n, l, w, h, 3)
+    points = x + y + corner[:, :, np.newaxis, np.newaxis, :]
     return points
 
 
@@ -204,6 +221,13 @@ if __name__ == "__main__":
     import time
     s = time.time()
     image = scene.ray_cast_vec()
+    image = np.minimum(image, np.ones((res[0], res[1], 3)))
     print(time.time() - s)
-    plt.imshow(image,origin='lower')
-    plt.show()
+    result = Image.fromarray(np.uint8(image*255), mode='RGB') #plt.imshow(image,origin='lower')
+    result = result.transpose(Image.FLIP_TOP_BOTTOM)
+    result.save(image_name) # plt.show()
+    plt.imshow(image, origin='lower')
+    plt.savefig("pyplot_try.png")
+
+if __name__ == "__main__":
+	main()

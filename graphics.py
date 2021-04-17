@@ -1,6 +1,7 @@
 import numpy as np
 from numpy.linalg import norm
 
+DTYPE = np.float32
 
 class Ray:
     def __init__(self, pos : np.array, vec : np.array):
@@ -11,7 +12,7 @@ class Ray:
 
 class Sphere:
     def __init__(self, x : str, y : str, z : str, radius : str, mat_idx : str):
-        self.pos = np.array([float(x),float(y),float(z)])
+        self.pos = np.array([float(x),float(y),float(z)], dtype=DTYPE)
         self.radius = float(radius)
         self.mat_idx = int(mat_idx)
 
@@ -23,7 +24,7 @@ class Sphere:
         sol = quad(a, b, c)
         if sol == None:
             return None
-        t1, t2 =sol
+        t1, t2 = sol
         return min(t1, t2), self.mat_idx
 
     def intersect2(self, ray: Ray):
@@ -41,13 +42,19 @@ class Sphere:
         # getting n rays, p0 and v are of shape (n,3)
         # returns t_min (array of shape n) and mat_idx
         l = self.pos[np.newaxis, :] - p0
-        t_ca = np.sum(l*v, axis=1)
+        # t_ca = np.sum(l*v, axis=1)
+        t_ca = np.einsum("nr,nr->n", l, v)
         d_sq = np.sum(l**2, axis=1) - t_ca**2
-        condition = (t_ca < 0) + (d_sq > self.radius**2)
-        t_hc = np.where(condition, np.inf, np.sqrt(self.radius**2 - d_sq)) # np.inf means no intersection
+        t_hc = self.con(t_ca, d_sq)
         t = (t_ca - t_hc)
         hit_point = p0 + v*t[:, np.newaxis]
         return t, self.mat_idx, self.get_normal_vec(hit_point)
+
+    def con(self, t_ca, d_sq):
+        condition = (t_ca < 0) + (d_sq > self.radius**2)
+        t_hc = np.where(condition, np.inf, np.sqrt(self.radius**2 - d_sq)) # np.inf means no intersection
+        return t_hc
+
 
     def get_normal_vec(self, p: np.array):
         d = p-self.pos
@@ -84,7 +91,7 @@ class Plane:
 
 class Box:
     def __init__(self, x : str, y:str, z:str, size:str, mat_idx : str):
-        self.pos = (float(x),float(y),float(z))
+        self.pos = np.array([float(x),float(y),float(z)], dtype=DTYPE)
         self.x=float(x)
         self.y=float(y)
         self.z=float(z)
@@ -168,15 +175,15 @@ class Light:
 class Camera:
     def __init__(self, x : str, y:str, z:str, lx : str, ly:str, lz:str, ux : str, uy:str,
                  uz:str, dist : str, width : str, fish_eye : str = False, k : str = 0.5):
-        self.pos = np.array([float(x), float(y), float(z)])
+        self.pos = np.array([float(x), float(y), float(z)], dtype=DTYPE)
         self.x = float(x)
         self.z = float(z)
         self.y = float(y)
-        self.lpos = np.array([float(lx), float(ly), float(lz)])
+        self.lpos = np.array([float(lx), float(ly), float(lz)], dtype=DTYPE)
         self.lx = float(lx)
         self.ly = float(ly)
         self.lz = float(lz)
-        self.upos = np.array([float(ux), float(uy), float(uz)])
+        self.upos = np.array([float(ux), float(uy), float(uz)], dtype=DTYPE)
         self.ux = float(ux)
         self.uy = float(uy)
         self.uz = float(uz)
@@ -197,7 +204,7 @@ class Camera:
 
 class Settings:
     def __init__(self, bgr : str, bgg : str, bgb : str, shadow_num : str, rec_level : str):
-        self.bg = np.array([float(bgr), float(bgg), float(bgb)])
+        self.bg = np.array([float(bgr), float(bgg), float(bgb)], dtype=DTYPE)
         self.shadow_num = int(shadow_num)
         self.rec_level = int(rec_level)
 
