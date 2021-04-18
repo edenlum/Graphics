@@ -41,19 +41,21 @@ class Sphere:
     def intersect_vec(self, p0 : np.array, v : np.array):
         # getting n rays, p0 and v are of shape (n,3)
         # returns t_min (array of shape n) and mat_idx
-        l = self.pos[np.newaxis, :] - p0
-        # t_ca = np.sum(l*v, axis=1)
-        t_ca = np.einsum("nr,nr->n", l, v)
-        d_sq = np.sum(l**2, axis=1) - t_ca**2
-        t_hc = self.con(t_ca, d_sq)
-        t = (t_ca - t_hc)
-        hit_point = p0 + v*t[:, np.newaxis]
-        return t, self.mat_idx, self.get_normal_vec(hit_point)
+        n = p0.shape[0]
+        t_min = np.full(n, np.inf)
+        normals = np.zeros_like(v)
 
-    def con(self, t_ca, d_sq):
-        condition = (t_ca < 0) + (d_sq > self.radius**2)
-        t_hc = np.where(condition, np.inf, np.sqrt(self.radius**2 - d_sq)) # np.inf means no intersection
-        return t_hc
+        l = self.pos[np.newaxis, :] - p0
+        t_ca = np.einsum("nd,nd->n", l, v)
+        mask = t_ca > 0
+        d_sq = np.zeros(n)
+        d_sq[mask] = np.einsum("nd,nd->n", l[mask], l[mask]) - t_ca[mask]**2
+        mask *= (d_sq <= self.radius**2)
+        t_hc = np.sqrt(self.radius**2 - d_sq[mask])
+        t_min[mask] = (t_ca[mask] - t_hc)
+        hit_points = p0[mask] + v[mask]*t_min[mask, np.newaxis]
+        normals[mask] = self.get_normal_vec(hit_points)
+        return t_min, self.mat_idx, normals
 
 
     def get_normal_vec(self, p: np.array):
