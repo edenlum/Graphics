@@ -38,24 +38,27 @@ class Sphere:
         t_hc = np.sqrt(self.radius**2 - d_sq)
         return (t_ca - t_hc), self.mat_idx # there is also t_ca+t_hc
 
-    def intersect_vec(self, p0 : np.array, v : np.array):
+    def intersect_vec(self, p0 : np.array, v : np.array, calc_normal=True):
         # getting n rays, p0 and v are of shape (n,3)
         # returns t_min (array of shape n) and mat_idx
         n = p0.shape[0]
-        t_min = np.full(n, np.inf)
-        normals = np.zeros_like(v)
+        t = np.full(n, np.inf, dtype=DTYPE)
+        normals = None
 
         l = self.pos[np.newaxis, :] - p0
         t_ca = np.einsum("nd,nd->n", l, v)
-        mask = t_ca > 0
-        d_sq = np.zeros(n)
+        mask = (t_ca >= 0).astype(bool)
+        d_sq = np.zeros(n, dtype=DTYPE)
         d_sq[mask] = np.einsum("nd,nd->n", l[mask], l[mask]) - t_ca[mask]**2
-        mask *= (d_sq <= self.radius**2)
+        mask = mask * (d_sq < self.radius**2)
         t_hc = np.sqrt(self.radius**2 - d_sq[mask])
-        t_min[mask] = (t_ca[mask] - t_hc)
-        hit_points = p0[mask] + v[mask]*t_min[mask, np.newaxis]
-        normals[mask] = self.get_normal_vec(hit_points)
-        return t_min, self.mat_idx, normals
+        t[mask] = t_ca[mask] - t_hc
+
+        if calc_normal:
+            normals = np.zeros_like(v, dtype=DTYPE)
+            hit_points = p0[mask] + v[mask]*t[mask, np.newaxis]
+            normals[mask] = self.get_normal_vec(hit_points)
+        return t, self.mat_idx, normals
 
 
     def get_normal_vec(self, p: np.array):
@@ -80,14 +83,16 @@ class Plane:
         t = (self.offset - np.dot(ray.p0, self.normal)) / (np.dot(ray.vec, self.normal))
         return t, self.mat_idx
 
-    def intersect_vec(self, p0: np.array, v: np.array):
+    def intersect_vec(self, p0: np.array, v: np.array, calc_normal=True):
         # getting n rays, p0 and v are of shape (n,3)
         # returns t_min (array of shape n) and mat_idx
         n = p0.shape[0]
         t = (self.offset - np.sum(p0*self.normal[np.newaxis,:], axis=1)) / np.sum(v*self.normal[np.newaxis,:], axis=1)
-        return t, self.mat_idx, np.tile(self.get_normal(), (n,1))
+        mask = (t > 0).astype(bool)
+        t = np.where(t > 0, t, np.inf)
+        return t, self.mat_idx, np.tile(self.get_normal(), (n, 1))
 
-    def get_normal(self):
+    def get_normal(self, *args):
         return self.normal
 
 
@@ -99,18 +104,16 @@ class Box:
         self.z=float(z)
         self.size = float(size)
         self.mat_idx = int(mat_idx)
-        print(str(self.x-self.size/2))
 
         # 6 planes, in order -x, x, -y, y, -z, z
         self.planes = [Plane('-1', '0', '0', str(-self.x + self.size/2), str(self.mat_idx)),
-            Plane('1', '0', '0', str(self.x + self.size/2), str(self.mat_idx)),
+                       Plane('1', '0', '0', str(self.x + self.size/2), str(self.mat_idx)),
+                       Plane('0', '-1', '0', str(-self.y + self.size/2), str(self.mat_idx)),
+                       Plane('0', '1', '0', str(self.y + self.size/2), str(self.mat_idx)),
+                       Plane('0', '0', '-1', str(-self.z + self.size/2), str(self.mat_idx)),
+                       Plane('0', '0', '1', str(self.z + self.size/2), str(self.mat_idx))]
 
-                        Plane('0', '-1', '0', str(-self.y + self.size/2), str(self.mat_idx)),
-                        Plane('0', '1', '0', str(self.y + self.size/2), str(self.mat_idx)),
-                        Plane('0', '0', '-1', str(-self.z + self.size/2), str(self.mat_idx)),
-                        Plane('0', '0', '1', str(self.z + self.size/2), str(self.mat_idx))]
-
-    def intersect_vec(self, p0: np.array, v: np.array):
+    def intersect_vec(self, p0: np.array, v: np.array, calc_normal=True):
         # a box is 6 planes, we will calculate the hit point in each plane
         # and check if the hit point is inside the boundaries
         n = p0.shape[0]
@@ -140,6 +143,14 @@ class Box:
         correct_normals = normals[indices, np.arange(n)].reshape(n,3)
 
         return correct_t, self.mat_idx, correct_normals
+
+    def get_normal(self, p:np.array):
+        eps = 1e-3
+        for plane in self.planes:
+            normal = plane.get_normal()
+            if abs(np.dot(normal, p) - plane.offset) < eps:
+                return normal
+        return np.zeros(3)
 
 
 class Material:
@@ -224,10 +235,11 @@ def quad(a,b,c):
         return None
 
 
-def normalize(vec : np.array, norm_axis=1):
+def normalize(vec: np.array, norm_axis=1):
     # gets a tensor of arbitrary shape,
     # and returns the tensor with values normalized according to given axis
-    return vec/np.sqrt(np.sum(vec**2, axis=norm_axis, keepdims=True))
+    norm = np.sqrt(np.sum(vec**2, axis=norm_axis, keepdims=True))
+    return np.divide(vec, norm, out=np.zeros_like(vec), where=norm != 0)
 
 
 def in_range(points: np.array, axises, lowers, uppers):

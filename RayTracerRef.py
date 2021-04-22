@@ -42,6 +42,7 @@ class Scene:
                     self.boxes.append(Box(*line[1:]))
                 if line[0] == "lgt":
                     self.lights.append(Light(*line[1:]))
+        self.objects = self.spheres + self.boxes + self.planes
         self.vectorize_attributes()
 
     def vectorize_attributes(self):
@@ -79,41 +80,74 @@ class Scene:
         n = self.height * self.width
         center_screen = self.camera.pos + self.camera.dist * self.camera.Vz
         rays_p0 = np.tile(self.camera.pos, (n, 1))  # shape of  n,3
-        grid_points = create_grid((self.width, self.height), self.camera.Vx[np.newaxis, np.newaxis, :],
-                                  self.camera.Vy[np.newaxis, np.newaxis, :], np.array([pixel_size]),
+        grid_points = create_grid((self.width, self.height), self.camera.Vx[np.newaxis, np.newaxis, :], \
+                                  self.camera.Vy[np.newaxis, np.newaxis, :], np.array([pixel_size]), \
                                   center_screen[np.newaxis, :], noise=False)
-
-
-        k = 0.5
-        rays_v, black_mask = fish_eye(self.camera.pos, k, grid_points.reshape((n, 3)), center_screen, self.camera.dist)
 
         rays_v = grid_points.reshape((n, 3)) - rays_p0
         # normalization
         rays_v = normalize(rays_v)
+        k = 0.5
+        # rays_v = fish_eye(self.camera.pos, k, grid_points.reshape((n,3)), center_screen, self.camera.dist)
         colors = np.zeros(shape, dtype=DTYPE)
         reflections = np.ones(shape, dtype=DTYPE)
+        transparency = np.ones(shape, dtype=DTYPE)
 
         rays_v = rays_v.astype(dtype=DTYPE)
         rays_p0 = rays_p0.astype(dtype=DTYPE)
 
-        mask = black_mask  # np.ones(n, dtype=bool)
+        ob = len(self.objects)
+        mask = np.ones((n), dtype=bool)
+        """ 
+        for each ray we calculate color like so:
+        color_ray(ray, depth=0)
+            c = 0
+            find first intersection. 
+            c += color(intersection) * (1-trans)
+            calculate reflection ray. 
+            c += reflection_color * color_ray(reflection_ray, depth = depth+1)
+            find next intersection with original ray
+            c += color_ray(trans_ray) * trans
+        """
 
-        for i in range(self.Settings.rec_level):
-            print(f"Recursion level: {i}")
-            mat_idxs, normals, t = np.zeros(n, dtype=np.int16), np.zeros((n, 3)), np.full(n, np.inf)
-            mat_idxs[mask], normals[mask], t[mask] = self.find_intersection_vec(rays_p0[mask], rays_v[mask])
+        return self.color_ray(rays_p0, rays_v).reshape(shape)
+
+    def color_ray(self, rays_p0, rays_v, intersections=None, index=0, rec_depth=0, mask=None):
+        if mask is None:
+            n = rays_p0.shape[0]
+        else:
+            n = mask.size
+        if index >= len(self.objects) or rec_depth > self.Settings.rec_level:
+            return np.full((n, 3), self.Settings.bg)
+        print(f"Recursion level: {rec_depth}, and transparency level: {index}")
+        color = np.full((n, 3), self.Settings.bg)
+        if intersections is None:
+            mat_idxs, normals, t = self.find_intersection_vec(rays_p0, rays_v)
+            intersections = (mat_idxs, normals, t) # save all the values for later use
+        else:
+            mat_idxs, normals, t = intersections  # retrieve values from previous calculation
+        mat_idxs, normals, t = mat_idxs[index], normals[index], t[index]  # get the intersection depth we are interested in
+        if mask is None:
             mask = np.isfinite(t)
-            hit_points = rays_p0[mask] + rays_v[mask] * t[mask, np.newaxis]
-            curr_colors = np.full((n, 3), self.Settings.bg)
-            curr_colors[mask] = self.get_color_vec(hit_points, mat_idxs[mask], normals[mask], rays_v[mask])
-            colors += reflections * curr_colors.reshape(shape)
-            reflections *= self.mat_ref[mat_idxs - 1].reshape(shape)
-            rays_p0[mask] = hit_points
-            rays_v[mask] = reflection(normals[mask], rays_v[mask])
+        else:
+            mask = mask * np.isfinite(t)
+        if not mask.any():
+            return np.full((n, 3), self.Settings.bg)
+        hit_points = rays_p0[mask] + rays_v[mask] * t[mask, np.newaxis]
+        color[mask] = self.get_color_vec(hit_points, mat_idxs[mask], normals[mask], rays_v[mask])
+        # reflections
+        reflections_p0 = hit_points
+        reflections_v = reflection(normals[mask], rays_v[mask])
+        color[mask] += self.mat_ref[mat_idxs[mask] - 1] * self.color_ray(reflections_p0, reflections_v, rec_depth=rec_depth+1)
+        # transparency
+        trans_mask = mask * self.mat_trans[mat_idxs - 1] > 0
+        print(np.sum(trans_mask))
+        if np.sum(trans_mask) > 0:
+            color[trans_mask] += self.mat_trans[mat_idxs - 1][trans_mask, np.newaxis] * self.color_ray(rays_p0, rays_v, intersections=intersections,
+                                                                                       index=index+1, rec_depth=rec_depth, mask=trans_mask)[trans_mask]
+        print(color.shape)
+        return color
 
-        colors[np.logical_not(black_mask).reshape(self.width, self.height)] = np.zeros(3, dtype=DTYPE)
-
-        return colors
 
     def find_intersection_vec(self, p0: np.array, v: np.array, shadow=False):
         n = p0.shape[0]
@@ -121,7 +155,7 @@ class Scene:
         mat_idxs = []
         normals = []
 
-        for obj in self.spheres + self.planes + self.boxes:
+        for obj in self.objects:
             inter, mat_idx, normal = obj.intersect_vec(p0, v, calc_normal=(not shadow))
 
             inters.append(inter)
@@ -129,14 +163,17 @@ class Scene:
             normals.append(normal)
 
         inters = np.stack(inters)
-        indices = inters.argmin(axis=0)
+        indices = inters.argsort(axis=0)
         if not shadow:  # if shadow then we don't care about these values
             mat_idxs = np.array(mat_idxs)
             mat_idxs = np.tile(mat_idxs, (n, 1))
-            mat_idxs = mat_idxs[np.arange(n), indices]
+            mat_idxs = np.take_along_axis(mat_idxs.T, indices, axis=0)
             normals = np.stack(normals)
-            normals = normals[indices, np.arange(n)].reshape(n, 3)
-        t = inters[indices, np.arange(n)]
+            normals_indices = np.repeat(indices, 3, axis=1).reshape(normals.shape)
+            normals = np.take_along_axis(normals, normals_indices, axis=0)
+        t = np.take_along_axis(inters, indices, axis=0)
+        if shadow:
+            t = t[0]
         return mat_idxs, normals, t
 
     def get_color_vec(self, hit_points, mat_idxs, normals, camera_vec):
@@ -166,12 +203,12 @@ class Scene:
             light_intensity = (1 - light.shadow) * 1 + light.shadow * precent  # shape is (n)
 
             cos = np.sum(d * normals, axis=1)  # shape is (n,)
-            background = self.Settings.bg[np.newaxis, :] * self.mat_trans[mat_idxs][:, np.newaxis]
+            # background = self.Settings.bg[np.newaxis, :] * self.mat_trans[mat_idxs][:, np.newaxis]
             diffuse = self.mat_dif[mat_idxs] * cos[:, np.newaxis]
             r = normalize(reflection(normals, -d))  # reflected normalized ray from light source to hit point
             phi = np.sum(r * camera_vec, axis=1)  # angle between reflected ray from light source and vector to camera
             spec = self.mat_spec[mat_idxs] * (phi ** self.mat_phong[mat_idxs])[:, np.newaxis]
-            hit_color = light.color[np.newaxis, :] * background + light.color[np.newaxis, :] * (diffuse + spec) * (1 - self.mat_trans[mat_idxs])[:, np.newaxis]
+            hit_color = light.color[np.newaxis, :] * (diffuse + spec) * (1 - self.mat_trans[mat_idxs])[:, np.newaxis]
             color += light_intensity[:, np.newaxis] * hit_color
 
         color = np.minimum(color, np.ones((n, 3)))
@@ -185,7 +222,7 @@ def create_grid(res, dir1: np.array, dir2: np.array, pixel_size: np.array, cente
     n = dir1.shape[0]
     w_size = w * pixel_size  # shape of l
     h_size = h * pixel_size
-    corner = center[np.newaxis, :] - dir1 * ((w_size - pixel_size) / 2)[np.newaxis, :, np.newaxis] - dir2 * ((h_size - pixel_size) / 2)[np.newaxis,:, np.newaxis]  # of shape (n, l, 3)
+    corner = center[np.newaxis, :] - dir1 * ((w_size) / 2)[np.newaxis, :, np.newaxis] - dir2 * ((h_size) / 2)[np.newaxis,:, np.newaxis]  # of shape (n, l, 3)
     x = np.arange(w)
     y = np.arange(h)
     x, y = np.meshgrid(x, y)
@@ -223,7 +260,6 @@ def main():
     result = Image.fromarray(np.uint8(image * 255), mode='RGB')  # plt.imshow(image,origin='lower')
     result = result.transpose(Image.FLIP_TOP_BOTTOM)
     result.save(image_name)  # plt.show()
-    result.show()
     plt.imshow(image, origin='lower')
     plt.savefig("pyplot_try.png")
 
