@@ -14,23 +14,18 @@ mtl		0.5	0.5	0.8	0.5	0.5	0.8	0	0.3	0.4	100	0
 
 
 # Plane:	nx	ny	nz	offset	mat_idx
-pln		0	1	0	-1	1
-pln		0	-1	0	-1	2
-pln		1	0	0	-1	3
-pln		-1	0	0	-1	4
-pln		0	0	-1	-1	5
-pln		0	0	1	-3      5
+pln	0	1	0	-1	1
+pln	0	-1	0	-1	2
+pln	1	0	0	-1	3
+pln	-1	0	0	-1	4
+pln	0	0	-1	-1	5
+pln	0	0	1	-3      	5
 
-# Sphere:	cx   	cy   	cz  	radius 	mat_idx
-sph		0.5	-0.7	0.0	0.3	3
-#sph		-0.3	-0.5	0.3	0.2	7
+# Sphere:		cx   	cy   	cz  	radius 	mat_idx
+sph		0.5	-0.7	0.0	0.3	6
+sph		-0.3	-0.5	0.3	0.2	7
 
-
-# Box:		cx   	cy   	cz  	size	mat_idx
-box		-0.4	-0.2	0.1	0.5	1
-#box		 0.4	 0.5	0.3	0.3	4
-
-# Lights:	px	py	pz	r	g	b	spec	shadow	width
+# Lights:		px	py	pz	r	g	b	spec	shadow	width
 lgt		0	0	0	0.5	0.5	0.5	1	0.5	0
 lgt		0	0	-1	0.5	0.5	0.5	1	0	0
 #lgt		-0.9	-0.9	-0.9	0.8	0.8	0.8	1	0	0

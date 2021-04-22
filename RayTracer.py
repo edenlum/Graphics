@@ -187,13 +187,15 @@ class Scene:
             light_pos = create_grid((shadows, shadows), dir1[:, np.newaxis, :], dir2[:, np.newaxis, :],
                                     np.array([light_pixel]), light.pos, noise=True)
             rays_p0 = np.repeat(hit_points, repeats=shadows ** 2, axis=0)
-            rays_v = normalize(light_pos.reshape(n * shadows ** 2, 3) - rays_p0)  # shape is (n*shadow^2 ,3)
+            distance2light = light_pos.reshape(n * shadows ** 2, 3) - rays_p0
+            rays_v = normalize(distance2light)  # shape is (n*shadow^2 ,3)
 
             # calculates intersections from hit_point to light source
             _, _, t = self.find_intersection_vec(rays_p0, rays_v, shadow=True)
-            t = t.reshape((n, shadows ** 2))
+            # t = t.reshape((n, shadows ** 2))
+            cond = t > np.sqrt(np.sum(distance2light**2, axis=1))
 
-            precent = np.sum(np.isinf(t), axis=1) / shadows ** 2
+            precent = np.sum(cond.reshape((n, shadows**2)), axis=1) / shadows ** 2
             light_intensity = (1 - light.shadow) * 1 + light.shadow * precent  # shape is (n)
 
             cos = np.sum(d * normals, axis=1)  # shape is (n,)

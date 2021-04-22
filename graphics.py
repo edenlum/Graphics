@@ -86,8 +86,11 @@ class Plane:
     def intersect_vec(self, p0: np.array, v: np.array, calc_normal=True):
         # getting n rays, p0 and v are of shape (n,3)
         # returns t_min (array of shape n) and mat_idx
+        # according to equation (p0 + v*t) * Normal = offset -> t = (offset-N*p0)/N*v
         n = p0.shape[0]
-        t = (self.offset - np.sum(p0*self.normal[np.newaxis,:], axis=1)) / np.sum(v*self.normal[np.newaxis,:], axis=1)
+        numerator = self.offset - np.sum(p0*self.normal[np.newaxis,:], axis=1)
+        denom = np.sum(v*self.normal[np.newaxis,:], axis=1)
+        t = np.divide(numerator, denom, out=np.full_like(numerator, -1), where=denom != 0)
         mask = (t > 0).astype(bool)
         t = np.where(t > 0, t, np.inf)
         return t, self.mat_idx, np.tile(self.get_normal(), (n, 1))
