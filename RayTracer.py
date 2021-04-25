@@ -117,7 +117,6 @@ class Scene:
             n = mask.size
         if index >= len(self.objects) or rec_depth > self.Settings.rec_level:
             return np.full((n, 3), self.Settings.bg)
-        print(f"Recursion level: {rec_depth}, and transparency level: {index}")
         color = np.full((n, 3), self.Settings.bg)
         if intersections is None:
             mat_idxs, normals, t = self.find_intersection(rays_p0, rays_v)
@@ -135,7 +134,7 @@ class Scene:
         color[mask] = self.get_color(hit_points, mat_idxs[mask], normals[mask], rays_v[mask])
         # reflections
         ref_mask = np.sum(self.mat_ref[mat_idxs[mask] - 1], axis=1) > 0  # at least one color > 0
-        reflections_p0 = hit_points[ref_mask]
+        reflections_p0 = hit_points[ref_mask] + normals[mask][ref_mask]*0.0001
         ref_mask = np.logical_and(np.sum(self.mat_ref[mat_idxs - 1], axis=1) > 0, mask)
         reflections_v = reflection(normals[ref_mask], rays_v[ref_mask])
         color[ref_mask] += self.mat_ref[mat_idxs[ref_mask] - 1] * self.color_ray(reflections_p0, reflections_v, rec_depth=rec_depth+1)
@@ -195,14 +194,12 @@ class Scene:
 
             # calculates intersections from hit_point to light source
             _, _, t = self.find_intersection(rays_p0, rays_v, shadow=True)
-            # t = t.reshape((n, shadows ** 2))
             cond = t > np.sqrt(np.sum(distance2light**2, axis=1))
 
             precent = np.sum(cond.reshape((n, shadows**2)), axis=1) / shadows ** 2
             light_intensity = (1 - light.shadow) * 1 + light.shadow * precent  # shape is (n)
 
             cos = np.sum(d * normals, axis=1)  # shape is (n,)
-            # background = self.Settings.bg[np.newaxis, :] * self.mat_trans[mat_idxs][:, np.newaxis]
             diffuse = self.mat_dif[mat_idxs] * cos[:, np.newaxis]
             r = normalize(reflection(normals, -d))  # reflected normalized ray from light source to hit point
             phi = np.sum(r * camera_vec, axis=1)  # angle between reflected ray from light source and vector to camera
@@ -272,15 +269,11 @@ def main():
 
     scene = Scene(res[0], res[1])
     scene.parse_scene(scene_name)
-    import time
-    s = time.time()
     image = scene.ray_cast()
     image = np.clip(image, 0, 1)
-    print(time.time() - s)
     result = Image.fromarray(np.uint8(image * 255), mode='RGB')  # plt.imshow(image,origin='lower')
     result = result.transpose(Image.FLIP_TOP_BOTTOM)
     result.save(image_name)
-    result.show()
 
 
 if __name__ == "__main__":

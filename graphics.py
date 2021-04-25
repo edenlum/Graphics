@@ -156,7 +156,7 @@ class Light:
 
 class Camera:
     def __init__(self, x : str, y:str, z:str, lx : str, ly:str, lz:str, ux : str, uy:str,
-                 uz:str, dist : str, width : str, fish_eye : str = False, k : str = 0.5):
+                 uz:str, dist : str, width : str, fish_eye: str = False, k : str = 0.5):
         self.pos = np.array([float(x), float(y), float(z)], dtype=DTYPE)
         self.x = float(x)
         self.z = float(z)
@@ -171,7 +171,7 @@ class Camera:
         self.uz = float(uz)
         self.dist = float(dist)
         self.width = float(width)
-        self.fish_eye = bool(fish_eye)
+        self.fish_eye = True if fish_eye == "True" else False
         self.k = float(k)
 
     def calc_axis(self,):
