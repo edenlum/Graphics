@@ -1,0 +1,14 @@
+- When checking if a ray intersects with an object to tell if we need shadow, no need to run over all objects, stop at first intersection.
+
+- Improve the calculation of r for spec: instead of finding r from reflection of ray to light source, compute V (vector to camera) for every object in advance, 
+ define H = norm(L + V), and to cos(phi) = H*N instead of cos(phi) = R*V
+
+- If transmitted != 0 then maybe we want to cast the transmitted ray
+
+- If reflection = 0 (or close to 0 in the recursive main loop) then maybe no need to cast again the reflected ray because it won't change much
+
+- From instructions, it seems that we need to continue the ray from the camera if we hit something transparent, and not just find background color...
+
+
+python -m cProfile -o test.txt bla
+pstats.Stats("test.txt").strip_dirs().sort_stats(2).print_stats(n rows)

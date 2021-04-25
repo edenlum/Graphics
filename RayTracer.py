@@ -48,13 +48,14 @@ class Scene:
     def vectorize_attributes(self):
         # creates np.arrays of shape (m, 3) or (m) where m is the number of materials/lights
         # each array contains the value of a field for all the materials by order
-        dif, spec, ref, phong, trans = [], [], [], [], []
+        dif, spec, ref, phong, trans, amb = [], [], [], [], [], []
         for mat in self.materials:
             dif.append(mat.dif)
             spec.append(mat.spec)
             ref.append(mat.ref)
             phong.append(mat.phong)
             trans.append(mat.trans)
+            amb.append(mat.amb)
 
         light_pos, light_rad, light_shadow, light_color = [], [], [], []
         for light in self.lights:
@@ -66,6 +67,7 @@ class Scene:
         self.mat_dif = np.stack(dif)
         self.mat_spec = np.stack(spec)
         self.mat_ref = np.stack(ref)
+        self.mat_amb = np.stack(amb)
         self.mat_phong = np.array(phong)
         self.mat_trans = np.array(trans)
         self.light_pos = np.array(light_pos)
@@ -73,7 +75,7 @@ class Scene:
         self.light_shadow = np.array(light_shadow)
         self.light_color = np.stack(light_color)
 
-    def ray_cast_vec(self, ):
+    def ray_cast(self, ):
         shape = (self.width, self.height, 3)
         pixel_size = self.camera.width / self.width
         self.camera.calc_axis()
@@ -118,8 +120,8 @@ class Scene:
         print(f"Recursion level: {rec_depth}, and transparency level: {index}")
         color = np.full((n, 3), self.Settings.bg)
         if intersections is None:
-            mat_idxs, normals, t = self.find_intersection_vec(rays_p0, rays_v)
-            intersections = (mat_idxs, normals, t) # save all the values for later use
+            mat_idxs, normals, t = self.find_intersection(rays_p0, rays_v)
+            intersections = (mat_idxs, normals, t)  # save all the values for later use
         else:
             mat_idxs, normals, t = intersections  # retrieve values from previous calculation
         mat_idxs, normals, t = mat_idxs[index], normals[index], t[index]  # get the intersection depth we are interested in
@@ -127,30 +129,31 @@ class Scene:
             mask = np.isfinite(t)
         else:
             mask = mask * np.isfinite(t)
-        if not mask.any():
+        if not mask.any():  # if all mask is 0, no need to calculate anything
             return np.full((n, 3), self.Settings.bg)
         hit_points = rays_p0[mask] + rays_v[mask] * t[mask, np.newaxis]
-        color[mask] = self.get_color_vec(hit_points, mat_idxs[mask], normals[mask], rays_v[mask])
+        color[mask] = self.get_color(hit_points, mat_idxs[mask], normals[mask], rays_v[mask])
         # reflections
-        reflections_p0 = hit_points
-        reflections_v = reflection(normals[mask], rays_v[mask])
-        color[mask] += self.mat_ref[mat_idxs[mask] - 1] * self.color_ray(reflections_p0, reflections_v, rec_depth=rec_depth+1)
+        ref_mask = np.sum(self.mat_ref[mat_idxs[mask] - 1], axis=1) > 0  # at least one color > 0
+        reflections_p0 = hit_points[ref_mask]
+        ref_mask = np.logical_and(np.sum(self.mat_ref[mat_idxs - 1], axis=1) > 0, mask)
+        reflections_v = reflection(normals[ref_mask], rays_v[ref_mask])
+        color[ref_mask] += self.mat_ref[mat_idxs[ref_mask] - 1] * self.color_ray(reflections_p0, reflections_v, rec_depth=rec_depth+1)
         # transparency
-        trans_mask = mask * self.mat_trans[mat_idxs - 1] > 0
-        print(np.sum(trans_mask))
+        trans_mask = np.logical_and(mask, self.mat_trans[mat_idxs - 1] > 0)
         color[trans_mask] += self.mat_trans[mat_idxs - 1][trans_mask, np.newaxis] * self.color_ray(rays_p0, rays_v, intersections=intersections,
                                                                                        index=index+1, rec_depth=rec_depth, mask=trans_mask)[trans_mask]
         return color
 
 
-    def find_intersection_vec(self, p0: np.array, v: np.array, shadow=False):
+    def find_intersection(self, p0: np.array, v: np.array, shadow=False):
         n = p0.shape[0]
         inters = []
         mat_idxs = []
         normals = []
 
         for obj in self.objects:
-            inter, mat_idx, normal = obj.intersect_vec(p0, v, calc_normal=(not shadow))
+            inter, mat_idx, normal = obj.intersect(p0, v, calc_normal=(not shadow))
 
             inters.append(inter)
             mat_idxs.append(mat_idx)
@@ -170,7 +173,7 @@ class Scene:
             t = t[0]
         return mat_idxs, normals, t
 
-    def get_color_vec(self, hit_points, mat_idxs, normals, camera_vec):
+    def get_color(self, hit_points, mat_idxs, normals, camera_vec):
         # getting n hit points and normals - shape (n,3), mat_idxs of shape n
         # returns color for each ray (n,3)
         mat_idxs = mat_idxs - 1
@@ -191,7 +194,7 @@ class Scene:
             rays_v = normalize(distance2light)  # shape is (n*shadow^2 ,3)
 
             # calculates intersections from hit_point to light source
-            _, _, t = self.find_intersection_vec(rays_p0, rays_v, shadow=True)
+            _, _, t = self.find_intersection(rays_p0, rays_v, shadow=True)
             # t = t.reshape((n, shadows ** 2))
             cond = t > np.sqrt(np.sum(distance2light**2, axis=1))
 
@@ -206,9 +209,30 @@ class Scene:
             spec = self.mat_spec[mat_idxs] * (phi ** self.mat_phong[mat_idxs])[:, np.newaxis]
             hit_color = light.color[np.newaxis, :] * (diffuse + spec) * (1 - self.mat_trans[mat_idxs])[:, np.newaxis]
             color += light_intensity[:, np.newaxis] * hit_color
+            # adding ambient lighting
+            color += self.get_ambient_color(hit_points, self.mat_amb[mat_idxs])
 
         color = np.minimum(color, np.ones((n, 3)))
         return color
+
+
+    def get_ambient_color(self, hit_points, mat_amb):
+        # gets array of points position, and material color for each point.
+        # calculates the ambient light color for each point by averaging over all light sources (closer = more weight)
+        # multiplies light color by material color and by ambient intensity and returns colors for each point.
+        n = hit_points.shape[0]
+        color = np.zeros((n, 3))
+        total_d_sq = np.zeros(n)
+        for light in self.lights:
+            d_sq = np.sum((light.pos[np.newaxis, :] - hit_points)**2, axis=1)
+            color += light.color[np.newaxis, :] * d_sq[:, np.newaxis]
+            total_d_sq += d_sq
+        color /= total_d_sq[:, np.newaxis]  # normalizing
+        color *= mat_amb  # multiplying by material ambient color
+        color *= self.Settings.amb_intensity  # multiplying by total ambient intensity in our scene
+        return color
+
+
 
 
 def create_grid(res, dir1: np.array, dir2: np.array, pixel_size: np.array, center: np.array, noise: bool):
@@ -250,7 +274,7 @@ def main():
     scene.parse_scene(scene_name)
     import time
     s = time.time()
-    image = scene.ray_cast_vec()
+    image = scene.ray_cast()
     image = np.clip(image, 0, 1)
     print(time.time() - s)
     result = Image.fromarray(np.uint8(image * 255), mode='RGB')  # plt.imshow(image,origin='lower')

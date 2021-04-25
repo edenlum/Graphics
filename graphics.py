@@ -16,29 +16,7 @@ class Sphere:
         self.radius = float(radius)
         self.mat_idx = int(mat_idx)
 
-    def intersect(self, ray : Ray):
-        a = 1
-        d = ray.p0 - self.pos
-        b = 2*np.dot(ray.vec, d)
-        c = np.sum(d**2) - self.radius **2
-        sol = quad(a, b, c)
-        if sol == None:
-            return None
-        t1, t2 = sol
-        return min(t1, t2), self.mat_idx
-
-    def intersect2(self, ray: Ray):
-        l = self.pos - ray.p0
-        t_ca = np.dot(l, ray.vec)
-        if (t_ca < 0):
-            return None
-        d_sq = np.dot(l, l) - t_ca**2
-        if (d_sq > self.radius**2):
-            return None
-        t_hc = np.sqrt(self.radius**2 - d_sq)
-        return (t_ca - t_hc), self.mat_idx # there is also t_ca+t_hc
-
-    def intersect_vec(self, p0 : np.array, v : np.array, calc_normal=True):
+    def intersect(self, p0 : np.array, v : np.array, calc_normal=True):
         # getting n rays, p0 and v are of shape (n,3)
         # returns t_min (array of shape n) and mat_idx
         n = p0.shape[0]
@@ -57,17 +35,13 @@ class Sphere:
         if calc_normal:
             normals = np.zeros_like(v, dtype=DTYPE)
             hit_points = p0[mask] + v[mask]*t[mask, np.newaxis]
-            normals[mask] = self.get_normal_vec(hit_points)
+            normals[mask] = self.get_normal(hit_points)
         return t, self.mat_idx, normals
 
 
-    def get_normal_vec(self, p: np.array):
+    def get_normal(self, p: np.array):
         d = p-self.pos
         n = normalize(d)
-        return n
-
-    def get_normal(self, p : np.array):
-        n = (p-self.pos)/norm(p-self.pos)
         return n
 
 
@@ -79,11 +53,7 @@ class Plane:
         self.offset = float(offset)
         self.mat_idx = int(mat_idx)
 
-    def intersect(self, ray : Ray):
-        t = (self.offset - np.dot(ray.p0, self.normal)) / (np.dot(ray.vec, self.normal))
-        return t, self.mat_idx
-
-    def intersect_vec(self, p0: np.array, v: np.array, calc_normal=True):
+    def intersect(self, p0: np.array, v: np.array, calc_normal=True):
         # getting n rays, p0 and v are of shape (n,3)
         # returns t_min (array of shape n) and mat_idx
         # according to equation (p0 + v*t) * Normal = offset -> t = (offset-N*p0)/N*v
@@ -116,7 +86,7 @@ class Box:
                        Plane('0', '0', '-1', str(-self.z + self.size/2), str(self.mat_idx)),
                        Plane('0', '0', '1', str(self.z + self.size/2), str(self.mat_idx))]
 
-    def intersect_vec(self, p0: np.array, v: np.array, calc_normal=True):
+    def intersect(self, p0: np.array, v: np.array, calc_normal=True):
         # a box is 6 planes, we will calculate the hit point in each plane
         # and check if the hit point is inside the boundaries
         n = p0.shape[0]
@@ -124,7 +94,7 @@ class Box:
         normals = []
 
         for i, plane in enumerate(self.planes):
-            t, _, normal = plane.intersect_vec(p0, v)
+            t, _, normal = plane.intersect(p0, v)
             hit_points = p0 + v*t[:, np.newaxis]
             if(i<=1):
                 condition = in_range(hit_points, [1,2], lowers=[self.y-self.size/2, self.z-self.size/2], uppers = [self.y+self.size/2, self.z+self.size/2])
@@ -157,18 +127,14 @@ class Box:
 
 
 class Material:
-    def __init__(self, dr : str, dg : str, db : str, sr : str, sg : str, sb : str, rr : str,
-                 rg : str, rb : str, phong : str, trans : str):
+    def __init__(self, dr: str, dg: str, db: str, sr: str, sg: str, sb: str, rr: str,
+                 rg: str, rb: str, phong: str, trans: str, ar: str = 0, ag: str = 0, ab: str = 0):
         self.dif = np.array([float(dr), float(dg), float(db)])
         self.spec = np.array([float(sr), float(sg), float(sb)])
         self.ref = np.array([float(rr), float(rg), float(rb)])
         self.phong = float(phong)
         self.trans = float(trans)
-
-    def get_color(self, bgc : np.array):
-        # self.color = bgc * self.trans + (self.dif + self.spec) * (1-self.trans) + self.ref
-        return self.dif
-
+        self.amb = np.array([float(ar), float(ag), float(ab)])
 
 
 class Light:
@@ -219,23 +185,17 @@ class Camera:
 
 
 class Settings:
-    def __init__(self, bgr : str, bgg : str, bgb : str, shadow_num : str, rec_level : str):
+    def __init__(self, bgr : str, bgg : str, bgb : str, shadow_num : str, rec_level : str, amb_intensity: str = '0'):
         self.bg = np.array([float(bgr), float(bgg), float(bgb)], dtype=DTYPE)
         self.shadow_num = int(shadow_num)
         self.rec_level = int(rec_level)
+        self.amb_intensity = float(amb_intensity)
 
 
 def reflection(normal : np.array, rays_v: np.array):
     direction = rays_v - 2*normal * np.sum(rays_v*normal,axis=1)[:,np.newaxis]
     #new_ray = direction
     return direction
-
-
-def quad(a,b,c):
-    if(b**2>=4*a*c):
-        return ((-b+np.sqrt(b**2-4*a*c))/(2*a),(-b-np.sqrt(b**2-4*a*c))/(2*a))
-    else:
-        return None
 
 
 def normalize(vec: np.array, norm_axis=1):
@@ -251,3 +211,7 @@ def in_range(points: np.array, axises, lowers, uppers):
         condition *= (points[:, axis] <= uppers[i])
         condition *= (points[:, axis] >= lowers[i])
     return condition
+
+
+def distance(points1, points2):
+    return np.sqrt(np.sum((points1 - points2)**2, axis=1))
